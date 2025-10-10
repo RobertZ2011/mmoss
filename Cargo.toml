@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = ["mmoss", "mmoss-examples-lib"]
+
+[workspace.dependencies]
+async-trait = "0.1.89"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0.100"
+bincode = "2.0.1"
+sdl2 = "0.38.0"
