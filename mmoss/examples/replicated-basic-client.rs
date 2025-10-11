@@ -1,4 +1,4 @@
-use mmoss::net::transport::{Unreliable, VecU8FactoryNew};
+use mmoss::net::transport::{Unreliable, VecU8FactoryNew, tcp};
 use mmoss::replication::{Id, Replicated};
 
 use mmoss_examples_lib::{ReplicatedData, Square};
@@ -9,7 +9,7 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut udp = mmoss::net::transport::udp::Udp::bind("127.0.0.1:8080", VecU8FactoryNew).await?;
+    let mut connection = tcp::Connection::connect("127.0.0.1:8080", VecU8FactoryNew).await?;
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -32,11 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
-        if let Ok(Some(message)) = udp.try_receive() {
-            let data: Vec<u8> = message.message;
-            println!("Received message from {}: {:?}", message.address, data);
+        if let Ok(Some(message)) = connection.try_receive() {
+            println!("Received message from {:?}", message);
 
-            let mut cursor = std::io::Cursor::new(data);
+            let mut cursor = std::io::Cursor::new(message);
             square.replicate(&mut cursor).unwrap();
         }
 

@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::{io, marker::PhantomData};
 
+pub mod tcp;
 pub mod udp;
 
 /// Message trait for serialization
@@ -23,6 +24,9 @@ pub trait Unreliable<M: Message> {
     async fn receive(&mut self) -> Result<M>;
     fn try_receive(&mut self) -> Result<Option<M>>;
 }
+
+/// Reliable transport for sending and receiving messages of type `M`
+pub trait Reliable<M: Message>: Unreliable<M> {}
 
 pub struct Addressed<A, M: Message> {
     pub address: A,

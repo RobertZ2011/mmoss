@@ -1,7 +1,5 @@
-use std::net::SocketAddr;
-
 use mmoss::{
-    net::transport::{Addressed, Unreliable, VecU8FactoryNew},
+    net::transport::{Unreliable, VecU8FactoryNew, tcp},
     replication::{Id, Replicated},
 };
 use mmoss_examples_lib::{ReplicatedData, Square};
@@ -13,9 +11,6 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut udp = mmoss::net::transport::udp::Udp::bind("0.0.0.0:0", VecU8FactoryNew).await?;
-    let address: SocketAddr = "127.0.0.1:8080".parse().unwrap();
-
     let mut square = Square {
         id: Id(0),
         replicated: ReplicatedData {
@@ -35,6 +30,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut canvas = window.into_canvas().build().unwrap();
 
+    // Wait for connection
+    let tcp = tcp::Listener::bind("127.0.0.1:8080").await.unwrap();
+    let (mut connection, addr) = tcp.accept(VecU8FactoryNew).await.unwrap();
+    println!("Client connected from {}", addr);
+
     canvas.set_draw_color(Color::RGB(0, 255, 255));
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -51,12 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let mut vec = Vec::with_capacity(512);
                     square.serialize(&mut vec)?;
-                    let message = Addressed {
-                        message: vec,
-                        address,
-                    };
-
-                    udp.send(message).await?;
+                    connection.send(vec).await?;
                 }
                 _ => {}
             }
