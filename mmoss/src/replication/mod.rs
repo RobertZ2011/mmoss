@@ -1,13 +1,70 @@
-use std::io;
-
 use anyhow::Result;
+use bevy_trait_query::queryable;
+use bincode::{Decode, Encode};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use crate::net::transport::{Message as MessageTrait, MessageFactory as MessageFactoryTrait};
+
+pub mod client;
+pub mod server;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode)]
 #[repr(transparent)]
-pub struct Id(pub u64);
+pub struct Id(pub u32);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode)]
+#[repr(transparent)]
+pub struct EntityType(pub u32);
+
+pub enum Role {
+    Server,
+    Client,
+}
+
+#[queryable]
 pub trait Replicated {
     fn id(&self) -> Id;
-    fn serialize(&self, writer: &mut impl io::Write) -> Result<()>;
-    fn replicate(&mut self, reader: &mut impl io::Read) -> Result<()>;
+    fn serialize(&self, data: &mut [u8]) -> Result<usize>;
+    fn replicate(&mut self, data: &[u8]) -> Result<usize>;
+}
+
+#[derive(Debug, Clone, Decode, Encode)]
+pub struct UpdateData {
+    pub id: Id,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Decode, Encode)]
+pub struct SpawnData {
+    pub id: Id,
+    pub entity_type: EntityType,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Decode, Encode)]
+pub enum Message {
+    Spawn(SpawnData),
+    Update(UpdateData),
+}
+
+impl MessageTrait for Message {
+    fn serialize(&self, data: &mut [u8]) -> Result<usize> {
+        Ok(bincode::encode_into_slice(
+            self,
+            data,
+            bincode::config::standard(),
+        )?)
+    }
+}
+
+pub struct MessageFactoryNew;
+
+impl MessageFactoryTrait for MessageFactoryNew {
+    type Message = Message;
+
+    fn deserialize(&self, _context: &(), _data: &[u8]) -> Result<(Self::Message, usize)> {
+        Ok(bincode::decode_from_slice(
+            _data,
+            bincode::config::standard(),
+        )?)
+    }
 }

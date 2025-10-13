@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -40,9 +40,7 @@ pub struct ConnectionManager<A, M: Message, T: Unreliable<Addressed<A, M>>> {
     pending_connections: PendingConnections<M>,
 }
 
-impl<A: std::hash::Hash + Eq + Clone, M: Message, T: Unreliable<Addressed<A, M>>>
-    ConnectionManager<A, M, T>
-{
+impl<A: Hash + Eq + Clone, M: Message, T: Unreliable<Addressed<A, M>>> ConnectionManager<A, M, T> {
     pub fn new(transport: T) -> Self {
         let (outgoing, incoming) = tokio::sync::mpsc::channel(128);
         Self {
@@ -77,12 +75,12 @@ pub struct Connection<M: Message> {
     sender: Sender<M>,
 }
 
-#[async_trait(?Send)]
-impl<M: Message> Unreliable<M> for Connection<M> {
-    async fn send(&mut self, message: M) -> Result<()> {
+#[async_trait]
+impl<M: Message + Clone> Unreliable<M> for Connection<M> {
+    async fn send(&mut self, message: &M) -> Result<()> {
         Ok(self
             .sender
-            .send(message)
+            .send(message.clone())
             .await
             .map_err(|_| anyhow::anyhow!("Failed to send message"))?)
     }

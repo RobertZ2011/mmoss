@@ -8,7 +8,12 @@ async-trait.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 bincode.workspace = true
+bevy = { workspace = true, features = ["std"]}
+bevy-trait-query.workspace = true
+log.workspace = true
 
 [dev-dependencies]
 sdl2.workspace = true
 mmoss-examples-lib = {path = "../mmoss-examples-lib"}
+static_cell.workspace = true
+env_logger.workspace = true

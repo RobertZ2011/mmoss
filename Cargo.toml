@@ -8,3 +8,8 @@ tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.100"
 bincode = "2.0.1"
 sdl2 = "0.38.0"
+bevy = { version = "0.17",default-features = false }
+bevy-trait-query = "0.17.1"
+static_cell = "2.1.1"
+log = "0.4.28"
+env_logger = "0.11.8"

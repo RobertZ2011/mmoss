@@ -1,4 +1,4 @@
-use std::{io::Cursor, marker::PhantomData, net::SocketAddr};
+use std::{marker::PhantomData, net::SocketAddr};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -7,7 +7,7 @@ use tokio::{
     net::{TcpListener, TcpStream, ToSocketAddrs},
 };
 
-use crate::net::transport::{Message, MessageFactory, Unreliable};
+use crate::net::transport::{Message, MessageFactory, Reliable, Unreliable};
 
 pub struct Listener<M: Message> {
     listener: TcpListener,
@@ -42,14 +42,11 @@ impl<F: MessageFactory> Connection<F> {
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl<F: MessageFactory> Unreliable<F::Message> for Connection<F> {
-    async fn send(&mut self, message: F::Message) -> Result<()> {
+    async fn send(&mut self, message: &F::Message) -> Result<()> {
         let mut buffer = [0u8; 512];
-        let mut cursor = Cursor::new(buffer.as_mut_slice());
-
-        message.serialize(&mut cursor)?;
-        let len = cursor.position() as usize;
+        let len = message.serialize(&mut buffer)?;
         self.stream.write(&buffer[..len]).await?;
         Ok(())
     }
@@ -57,16 +54,16 @@ impl<F: MessageFactory> Unreliable<F::Message> for Connection<F> {
     async fn receive(&mut self) -> Result<F::Message> {
         let mut buffer = [0u8; 512];
         let len = self.stream.read(&mut buffer).await?;
-        let mut cursor = Cursor::new(&buffer[..len]);
-        self.factory.deserialize(&(), &mut cursor)
+        let (message, _) = self.factory.deserialize(&(), &buffer[..len])?;
+        Ok(message)
     }
 
     fn try_receive(&mut self) -> Result<Option<F::Message>> {
         let mut buffer = [0u8; 512];
         match self.stream.try_read(&mut buffer) {
             Ok(len) if len > 0 => {
-                let mut cursor = Cursor::new(&buffer[..len]);
-                Ok(Some(self.factory.deserialize(&(), &mut cursor)?))
+                let (message, _) = self.factory.deserialize(&(), &buffer[..len])?;
+                Ok(Some(message))
             }
             Ok(_) => Ok(None),
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
@@ -74,3 +71,5 @@ impl<F: MessageFactory> Unreliable<F::Message> for Connection<F> {
         }
     }
 }
+
+impl<F: MessageFactory> Reliable<F::Message> for Connection<F> {}

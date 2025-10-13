@@ -1,4 +1,4 @@
-use std::{io::Cursor, net::SocketAddr};
+use std::net::SocketAddr;
 
 use crate::net::transport::{Addressed, AddressedFactory, Message, MessageFactory, Unreliable};
 use anyhow::Result;
@@ -19,14 +19,11 @@ impl<F: MessageFactory> Udp<F> {
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl<F: MessageFactory> Unreliable<Addressed<SocketAddr, F::Message>> for Udp<F> {
-    async fn send(&mut self, message: Addressed<SocketAddr, F::Message>) -> Result<()> {
+    async fn send(&mut self, message: &Addressed<SocketAddr, F::Message>) -> Result<()> {
         let mut buffer = [0u8; 512];
-        let mut cursor = Cursor::new(buffer.as_mut_slice());
-
-        message.serialize(&mut cursor)?;
-        let len = cursor.position() as usize;
+        let len = message.serialize(&mut buffer)?;
         self.socket.send_to(&buffer[..len], message.address).await?;
         Ok(())
     }
@@ -35,8 +32,8 @@ impl<F: MessageFactory> Unreliable<Addressed<SocketAddr, F::Message>> for Udp<F>
         let mut buffer = [0u8; 512];
 
         let (len, addr) = self.socket.recv_from(&mut buffer).await?;
-        let mut cursor = Cursor::new(&buffer[..len]);
-        self.factory.deserialize(&addr, &mut cursor)
+        let (message, _) = self.factory.deserialize(&addr, &buffer[..len])?;
+        Ok(message)
     }
 
     fn try_receive(&mut self) -> Result<Option<Addressed<SocketAddr, F::Message>>> {
@@ -44,8 +41,8 @@ impl<F: MessageFactory> Unreliable<Addressed<SocketAddr, F::Message>> for Udp<F>
 
         match self.socket.try_recv_from(&mut buffer) {
             Ok((len, addr)) => {
-                let mut cursor = Cursor::new(&buffer[..len]);
-                Ok(Some(self.factory.deserialize(&addr, &mut cursor)?))
+                let (message, _) = self.factory.deserialize(&addr, &buffer[..len])?;
+                Ok(Some(message))
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
             Err(e) => Err(e.into()),

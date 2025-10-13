@@ -7,3 +7,4 @@ edition = "2024"
 mmoss = { path = "../mmoss"}
 anyhow.workspace = true
 bincode.workspace = true
+bevy = { workspace = true, features = ["std"]}
