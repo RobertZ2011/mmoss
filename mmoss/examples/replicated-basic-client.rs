@@ -5,8 +5,8 @@ use mmoss::replication::client::{Factory, Manager};
 use mmoss::replication::{Id, MessageFactoryNew, Replicated};
 
 use env_logger;
-use mmoss_examples_lib::ReplicatedComponent;
 use mmoss_examples_lib::mob::SQUARE_TYPE;
+use mmoss_examples_lib::{RenderComponent, ReplicatedComponent};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -48,6 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut world = World::new();
     world.register_component_as::<dyn Replicated, ReplicatedComponent>();
+    world.register_component_as::<dyn Replicated, RenderComponent>();
 
     world.spawn(ReplicatedComponent::new(Id(0)));
 
@@ -69,8 +70,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
 
-        canvas.set_draw_color(Color::RGB(0, 255, 255));
-        for replicated in world.query::<&ReplicatedComponent>().iter(&world) {
+        for (render, replicated) in world
+            .query::<(&RenderComponent, &ReplicatedComponent)>()
+            .iter(&world)
+        {
+            canvas.set_draw_color(render.color);
             canvas.draw_line(
                 replicated.replicated.position,
                 (

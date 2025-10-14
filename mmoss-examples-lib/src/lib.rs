@@ -5,7 +5,7 @@ use mmoss::{
     replication::{Id, Replicated},
 };
 
-use sdl2::render::Canvas;
+use sdl2::{pixels::Color, render::Canvas};
 
 use anyhow::{Result, anyhow};
 
@@ -50,8 +50,40 @@ impl Replicated for ReplicatedComponent {
     }
 }
 
-#[derive(Debug, Clone, Component)]
-pub struct RenderComponent;
+#[derive(Debug, Clone, Component, Decode, Encode)]
+pub struct RenderComponent {
+    id: Id,
+    pub color: (u8, u8, u8),
+}
+
+impl RenderComponent {
+    pub fn new(id: Id) -> Self {
+        Self {
+            id,
+            color: (0, 0, 0),
+        }
+    }
+}
+
+impl Replicated for RenderComponent {
+    fn id(&self) -> Id {
+        self.id
+    }
+
+    fn serialize(&self, writer: &mut [u8]) -> Result<usize> {
+        Ok(bincode::encode_into_slice(
+            &self.color,
+            writer,
+            bincode::config::standard(),
+        )?)
+    }
+
+    fn replicate(&mut self, reader: &[u8]) -> Result<usize> {
+        let (message, len) = bincode::decode_from_slice(reader, bincode::config::standard())?;
+        self.color = message;
+        Ok(len)
+    }
+}
 
 impl RenderComponent {
     pub fn render(
@@ -59,7 +91,9 @@ impl RenderComponent {
         canvas: &mut Canvas<sdl2::video::Window>,
         rotation: f32,
         position: (i32, i32),
+        (r, g, b): (u8, u8, u8),
     ) -> Result<()> {
+        canvas.set_draw_color(Color::RGB(r, g, b));
         canvas
             .draw_line(
                 position,
@@ -74,7 +108,7 @@ impl RenderComponent {
 }
 
 pub mod mob {
-    use bevy::ecs::world::World;
+    use bevy::ecs::{entity::Entity, world::World};
     use mmoss::replication::{Id, MobType, Replicated};
 
     use super::*;
@@ -82,7 +116,7 @@ pub mod mob {
     pub const SQUARE_TYPE: MobType = MobType(5);
 
     pub fn square_client(world: &mut World, replicated: &[(Id, Vec<u8>)]) -> anyhow::Result<()> {
-        if replicated.len() != 1 {
+        if replicated.len() != 2 {
             return Err(anyhow::anyhow!(
                 "Expected 1 replicated component, got {}",
                 replicated.len()
@@ -92,25 +126,25 @@ pub mod mob {
         let mut replicated_component = ReplicatedComponent::new(replicated[0].0);
         replicated_component.replicate(&replicated[0].1)?;
 
-        let mut entity = world.spawn((SQUARE_TYPE, replicated_component, RenderComponent));
-        for (id, data) in replicated {
-            entity.insert(super::ReplicatedComponent {
-                id: *id,
-                replicated: bincode::decode_from_slice(data, bincode::config::standard())?.0,
-            });
-            entity.insert(super::RenderComponent);
-        }
+        let mut render_component = RenderComponent::new(replicated[1].0);
+        render_component.replicate(&replicated[1].1)?;
+
+        let _ = world.spawn((SQUARE_TYPE, replicated_component, render_component));
         Ok(())
     }
 
     pub fn square_server(
         world: &mut World,
         replicated_data: (Id, ReplicatedData),
-    ) -> anyhow::Result<()> {
+        render_data: (Id, (u8, u8, u8)),
+    ) -> anyhow::Result<Entity> {
         let mut replicated_component = ReplicatedComponent::new(replicated_data.0);
         replicated_component.replicated = replicated_data.1;
 
-        world.spawn((SQUARE_TYPE, replicated_component, RenderComponent));
-        Ok(())
+        let mut render_component = RenderComponent::new(render_data.0);
+        render_component.color = render_data.1;
+        Ok(world
+            .spawn((SQUARE_TYPE, replicated_component, render_component))
+            .id())
     }
 }

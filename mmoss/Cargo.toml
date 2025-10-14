@@ -17,3 +17,4 @@ sdl2.workspace = true
 mmoss-examples-lib = {path = "../mmoss-examples-lib"}
 static_cell.workspace = true
 env_logger.workspace = true
+rand.workspace = true

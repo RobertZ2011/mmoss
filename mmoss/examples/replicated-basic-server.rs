@@ -1,12 +1,15 @@
-use bevy::ecs::{entity::Entity, world::World};
+use bevy::ecs::world::World;
 use bevy_trait_query::RegisterExt;
 use log::info;
 use mmoss::{
     net::transport::tcp,
     replication::{Id, MessageFactoryNew, Replicated, server::Manager},
 };
-use mmoss_examples_lib::{ReplicatedComponent, ReplicatedData};
+use mmoss_examples_lib::{
+    RenderComponent, ReplicatedComponent, ReplicatedData, mob::square_server,
+};
 
+use rand::Rng;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -33,22 +36,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut world = World::new();
     world.register_component_as::<dyn Replicated, ReplicatedComponent>();
-
-    mmoss_examples_lib::mob::square_server(
-        &mut world,
-        (
-            Id(1),
-            ReplicatedData {
-                position: (400, 300),
-                rotation: 0.0,
-            },
-        ),
-    )?;
+    world.register_component_as::<dyn Replicated, RenderComponent>();
 
     let mut manager = Manager::new();
     manager.add_client(Box::new(connection)).await;
 
-    canvas.set_draw_color(Color::RGB(0, 255, 255));
+    let mut id: Id = Id(1);
+    let mut rng = rand::rng();
+
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -58,15 +53,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
-                Event::MouseButtonDown { .. } => {
-                    for (entity, mut replicated) in world
-                        .query::<(Entity, &mut ReplicatedComponent)>()
-                        .iter_mut(&mut world)
-                    {
-                        replicated.replicated.rotation += 45.0;
-                        replicated.replicated.rotation %= 360.0;
-                        manager.mark_dirty(entity).await;
-                    }
+                Event::MouseButtonDown { x, y, .. } => {
+                    let id0 = id;
+                    id.0 += 1;
+                    let id1 = id;
+                    id.0 += 1;
+
+                    let entity = square_server(
+                        &mut world,
+                        (
+                            id0,
+                            ReplicatedData {
+                                position: (x, y),
+                                rotation: 360.0 * rng.random::<f32>(),
+                            },
+                        ),
+                        (
+                            id1,
+                            (rng.random::<u8>(), rng.random::<u8>(), rng.random::<u8>()),
+                        ),
+                    )
+                    .unwrap();
+
+                    manager.register_new_entity(entity).await;
                 }
                 _ => {}
             }
@@ -77,8 +86,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
 
-        canvas.set_draw_color(Color::RGB(0, 255, 255));
-        for replicated in world.query::<&ReplicatedComponent>().iter(&world) {
+        for (render, replicated) in world
+            .query::<(&RenderComponent, &ReplicatedComponent)>()
+            .iter(&world)
+        {
+            canvas.set_draw_color(render.color);
             canvas.draw_line(
                 replicated.replicated.position,
                 (
