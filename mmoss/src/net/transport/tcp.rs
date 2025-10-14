@@ -42,24 +42,26 @@ impl<F: MessageFactory> Connection<F> {
     }
 }
 
+const BUFFER_SIZE: usize = 512;
+
 #[async_trait]
 impl<F: MessageFactory> Unreliable<F::Message> for Connection<F> {
     async fn send(&mut self, message: &F::Message) -> Result<()> {
-        let mut buffer = [0u8; 512];
+        let mut buffer = [0u8; BUFFER_SIZE];
         let len = message.serialize(&mut buffer)?;
         self.stream.write(&buffer[..len]).await?;
         Ok(())
     }
 
     async fn receive(&mut self) -> Result<F::Message> {
-        let mut buffer = [0u8; 512];
+        let mut buffer = [0u8; BUFFER_SIZE];
         let len = self.stream.read(&mut buffer).await?;
         let (message, _) = self.factory.deserialize(&(), &buffer[..len])?;
         Ok(message)
     }
 
     fn try_receive(&mut self) -> Result<Option<F::Message>> {
-        let mut buffer = [0u8; 512];
+        let mut buffer = [0u8; BUFFER_SIZE];
         match self.stream.try_read(&mut buffer) {
             Ok(len) if len > 0 => {
                 let (message, _) = self.factory.deserialize(&(), &buffer[..len])?;

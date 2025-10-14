@@ -8,3 +8,4 @@ mmoss = { path = "../mmoss"}
 anyhow.workspace = true
 bincode.workspace = true
 bevy = { workspace = true, features = ["std"]}
+sdl2.workspace = true

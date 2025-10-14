@@ -1,4 +1,5 @@
 use anyhow::Result;
+use bevy::ecs::component::Component;
 use bevy_trait_query::queryable;
 use bincode::{Decode, Encode};
 
@@ -11,14 +12,9 @@ pub mod server;
 #[repr(transparent)]
 pub struct Id(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode, Component)]
 #[repr(transparent)]
-pub struct EntityType(pub u32);
-
-pub enum Role {
-    Server,
-    Client,
-}
+pub struct MobType(pub u32);
 
 #[queryable]
 pub trait Replicated {
@@ -35,9 +31,8 @@ pub struct UpdateData {
 
 #[derive(Debug, Clone, Decode, Encode)]
 pub struct SpawnData {
-    pub id: Id,
-    pub entity_type: EntityType,
-    pub data: Vec<u8>,
+    pub mob_type: MobType,
+    pub replicated: Vec<(Id, Vec<u8>)>,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

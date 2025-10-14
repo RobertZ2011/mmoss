@@ -5,7 +5,7 @@ use mmoss::{
     net::transport::tcp,
     replication::{Id, MessageFactoryNew, Replicated, server::Manager},
 };
-use mmoss_examples_lib::ReplicatedComponent;
+use mmoss_examples_lib::{ReplicatedComponent, ReplicatedData};
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -31,14 +31,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (connection, addr) = tcp.accept(MessageFactoryNew).await.unwrap();
     info!("Client connected from {}", addr);
 
-    let mut manager = Manager::new();
-
-    manager.add_client(Box::new(connection)).await;
-
     let mut world = World::new();
     world.register_component_as::<dyn Replicated, ReplicatedComponent>();
 
-    world.spawn(ReplicatedComponent::new(Id(0)));
+    mmoss_examples_lib::mob::square_server(
+        &mut world,
+        (
+            Id(1),
+            ReplicatedData {
+                position: (400, 300),
+                rotation: 0.0,
+            },
+        ),
+    )?;
+
+    let mut manager = Manager::new();
+    manager.add_client(Box::new(connection)).await;
 
     canvas.set_draw_color(Color::RGB(0, 255, 255));
     let mut event_pump = sdl_context.event_pump().unwrap();

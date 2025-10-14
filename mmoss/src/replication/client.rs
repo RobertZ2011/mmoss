@@ -2,39 +2,40 @@ use std::collections::{HashMap, VecDeque};
 
 use anyhow::Result;
 use bevy::prelude::World;
+use log::{error, trace};
 use tokio::sync::Mutex;
 
 use crate::{
     net::transport::Unreliable,
-    replication::{Id, Message, Replicated, SpawnData, UpdateData},
+    replication::{Id, Message, MobType, Replicated, SpawnData, UpdateData},
 };
 
 struct Pending {
     updates: HashMap<Id, VecDeque<UpdateData>>,
-    spawns: HashMap<Id, VecDeque<SpawnData>>,
+    spawns: VecDeque<SpawnData>,
 }
 
 impl Pending {
     pub fn new() -> Self {
         Self {
             updates: HashMap::new(),
-            spawns: HashMap::new(),
+            spawns: VecDeque::new(),
         }
     }
 }
 
-pub struct Manager {
+pub struct Manager<'f> {
     transport: Mutex<Box<dyn Unreliable<Message>>>,
     pending: Mutex<Pending>,
+    mob_factory: &'f Factory,
 }
 
-unsafe impl Send for Manager {}
-
-impl Manager {
-    pub fn new(transport: Box<dyn Unreliable<Message>>) -> Self {
+impl<'f> Manager<'f> {
+    pub fn new(transport: Box<dyn Unreliable<Message>>, mob_factory: &'f Factory) -> Self {
         Self {
             transport: Mutex::new(transport),
             pending: Mutex::new(Pending::new()),
+            mob_factory,
         }
     }
 
@@ -50,7 +51,8 @@ impl Manager {
                     .push_back(update);
             }
             Message::Spawn(spawn) => {
-                pending.spawns.entry(spawn.id).or_default().push_back(spawn);
+                trace!("Received spawn: {:?}", spawn);
+                pending.spawns.push_back(spawn);
             }
         }
 
@@ -58,6 +60,23 @@ impl Manager {
     }
 
     pub async fn update_world(&self, world: &mut World) {
+        // Process spawns
+        let spawns = self
+            .pending
+            .lock()
+            .await
+            .spawns
+            .drain(..)
+            .collect::<Vec<_>>();
+        for spawn in spawns {
+            if let Err(e) = self
+                .mob_factory
+                .construct(world, spawn.mob_type, &spawn.replicated)
+            {
+                error!("Failed to spawn mob of type {:?}: {}", spawn.mob_type, e);
+            }
+        }
+
         // Process updates
         let mut components = world.query::<&mut dyn Replicated>();
         for replicated in components.iter_mut(world) {
@@ -81,5 +100,36 @@ impl Manager {
                 }
             }
         }
+    }
+}
+
+pub struct Factory {
+    prototypes: HashMap<MobType, Box<dyn Fn(&mut World, &[(Id, Vec<u8>)]) -> Result<()> + Sync>>,
+}
+
+impl Factory {
+    pub fn new() -> Self {
+        Self {
+            prototypes: HashMap::new(),
+        }
+    }
+
+    pub fn register<F>(&mut self, mob_type: MobType, constructor: F)
+    where
+        F: 'static + Fn(&mut World, &[(Id, Vec<u8>)]) -> Result<()> + Sync,
+    {
+        self.prototypes.insert(mob_type, Box::new(constructor));
+    }
+
+    pub fn construct(
+        &self,
+        world: &mut World,
+        mob_type: MobType,
+        replicated: &Vec<(Id, Vec<u8>)>,
+    ) -> Result<()> {
+        let constructor = self.prototypes.get(&mob_type).ok_or_else(|| {
+            anyhow::anyhow!("No prototype registered for mob type {:?}", mob_type)
+        })?;
+        constructor(world, replicated)
     }
 }

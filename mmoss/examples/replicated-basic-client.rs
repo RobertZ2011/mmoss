@@ -1,11 +1,12 @@
 use bevy::ecs::world::World;
 use bevy_trait_query::RegisterExt;
 use mmoss::net::transport::tcp;
-use mmoss::replication::client::Manager;
+use mmoss::replication::client::{Factory, Manager};
 use mmoss::replication::{Id, MessageFactoryNew, Replicated};
 
 use env_logger;
 use mmoss_examples_lib::ReplicatedComponent;
+use mmoss_examples_lib::mob::SQUARE_TYPE;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -28,8 +29,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut canvas = window.into_canvas().build().unwrap();
 
+    let mut mob_factory = Factory::new();
+    mob_factory.register(SQUARE_TYPE, mmoss_examples_lib::mob::square_client);
+
+    static FACTORY: StaticCell<Factory> = StaticCell::new();
+    let factory = FACTORY.init(mob_factory);
+
     static MANAGER: StaticCell<Manager> = StaticCell::new();
-    let manager = MANAGER.init(Manager::new(Box::new(connection)));
+    let manager = MANAGER.init(Manager::new(Box::new(connection), factory));
 
     tokio::spawn(async {
         loop {
