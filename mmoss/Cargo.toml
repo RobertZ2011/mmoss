@@ -11,6 +11,7 @@ bincode.workspace = true
 bevy = { workspace = true, features = ["std"]}
 bevy-trait-query.workspace = true
 log.workspace = true
+mmoss-proc-macros = { path = "../mmoss-proc-macros"}
 
 [dev-dependencies]
 sdl2.workspace = true

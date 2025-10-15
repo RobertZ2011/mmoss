@@ -1,10 +1,8 @@
 use bevy::ecs::component::Component;
 use bincode::{Decode, Encode};
-use mmoss::{
-    self,
-    replication::{Id, Replicated},
-};
+use mmoss::{self, replication::Id};
 
+use mmoss_proc_macros::Replicated;
 use sdl2::{pixels::Color, render::Canvas};
 
 use anyhow::{Result, anyhow};
@@ -15,9 +13,11 @@ pub struct ReplicatedData {
     pub position: (i32, i32),
 }
 
-#[derive(Debug, Clone, Component)]
+#[derive(Debug, Clone, Component, Replicated)]
 pub struct ReplicatedComponent {
+    #[replication_id]
     pub id: Id,
+    #[replicated]
     pub replicated: ReplicatedData,
 }
 
@@ -30,29 +30,11 @@ impl ReplicatedComponent {
     }
 }
 
-impl Replicated for ReplicatedComponent {
-    fn id(&self) -> mmoss::replication::Id {
-        self.id
-    }
-
-    fn serialize(&self, writer: &mut [u8]) -> Result<usize> {
-        Ok(bincode::encode_into_slice(
-            &self.replicated,
-            writer,
-            bincode::config::standard(),
-        )?)
-    }
-
-    fn replicate(&mut self, reader: &[u8]) -> Result<usize> {
-        let (message, len) = bincode::decode_from_slice(reader, bincode::config::standard())?;
-        self.replicated = message;
-        Ok(len)
-    }
-}
-
-#[derive(Debug, Clone, Component, Decode, Encode)]
+#[derive(Debug, Clone, Component, Decode, Encode, Replicated)]
 pub struct RenderComponent {
+    #[replication_id]
     id: Id,
+    #[replicated]
     pub color: (u8, u8, u8),
 }
 
@@ -62,26 +44,6 @@ impl RenderComponent {
             id,
             color: (0, 0, 0),
         }
-    }
-}
-
-impl Replicated for RenderComponent {
-    fn id(&self) -> Id {
-        self.id
-    }
-
-    fn serialize(&self, writer: &mut [u8]) -> Result<usize> {
-        Ok(bincode::encode_into_slice(
-            &self.color,
-            writer,
-            bincode::config::standard(),
-        )?)
-    }
-
-    fn replicate(&mut self, reader: &[u8]) -> Result<usize> {
-        let (message, len) = bincode::decode_from_slice(reader, bincode::config::standard())?;
-        self.color = message;
-        Ok(len)
     }
 }
 
