@@ -45,16 +45,14 @@ pub fn derive_replicated(input: proc_macro::TokenStream) -> proc_macro::TokenStr
             .into();
     }
 
-    if replicated_fields.is_empty() {
-        return syn::Error::new_spanned(name, "No fields marked with #[replicated]")
-            .to_compile_error()
-            .into();
-    }
-
     let expanded = quote! {
-        impl #impl_generics ::mmoss::replication::Replicated for #name #ty_generics #where_clause {
-            fn id(&self) -> ::mmoss::replication::Id {
+        impl #impl_generics replication::Replicated for #name #ty_generics #where_clause {
+            fn id(&self) -> replication::Id {
                 self.#replication_id_field
+            }
+
+            fn component_id(&self, world: &bevy::ecs::world::World) -> bevy::ecs::component::ComponentId {
+                world.component_id::<Self>().unwrap()
             }
 
             fn serialize(&self, data: &mut [u8]) -> ::anyhow::Result<usize> {

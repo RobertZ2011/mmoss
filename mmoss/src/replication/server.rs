@@ -9,8 +9,9 @@ use log::{error, trace};
 use tokio::sync::Mutex;
 
 use crate::{
+    core::mob::MobComponent,
     net::transport::Reliable,
-    replication::{Message, MobType, Replicated, SpawnData, UpdateData},
+    replication::{Message, Replicated, SpawnData, UpdateData},
 };
 
 struct Inner {
@@ -59,10 +60,11 @@ impl Manager {
     }
 
     async fn serialize_spawned<'a>(
+        world: &World,
         clients: &mut [Box<dyn Reliable<Message>>],
-        iter: impl Iterator<Item = (&'a MobType, ReadTraits<'a, dyn Replicated>)>,
+        iter: impl Iterator<Item = (&'a MobComponent, ReadTraits<'a, dyn Replicated>)>,
     ) {
-        for (mob_type, components) in iter {
+        for (mob, components) in iter {
             let mut replicated = Vec::new();
             for comp in components {
                 let mut data = vec![0u8; 512];
@@ -79,16 +81,16 @@ impl Manager {
                 let len = result.unwrap();
                 data.truncate(len);
                 trace!("Serialized component {:?}: {} bytes", comp.id(), data.len());
-                replicated.push((comp.id(), data));
+                replicated.push((comp.component_id(world).index(), comp.id(), data));
             }
 
             let message = Message::Spawn(SpawnData {
-                mob_type: *mob_type,
+                mob_type: mob.mob_type,
                 replicated,
             });
 
             trace!(
-                "Sending spawn message to {} clients, {:#?}",
+                "Sending spawn message to {} clients, {:?}",
                 clients.len(),
                 message
             );
@@ -141,9 +143,10 @@ impl Manager {
         // Next, handle any newly spawned entities
         if !inner.newly_spawned.is_empty() {
             trace!("Newly spawned entities: {:?}", inner.newly_spawned.len());
-            let mut query = world.query::<(&MobType, All<&dyn Replicated>)>();
+            let mut query = world.query::<(&MobComponent, All<&dyn Replicated>)>();
             let entities = mem::replace(&mut inner.newly_spawned, EntityHashSet::new());
-            Self::serialize_spawned(&mut inner.clients, query.iter_many(world, entities)).await;
+            Self::serialize_spawned(world, &mut inner.clients, query.iter_many(world, entities))
+                .await;
             inner.newly_spawned.clear();
         }
 
@@ -153,8 +156,8 @@ impl Manager {
                 "Clients pending full sync: {}",
                 inner.pending_full_sync.len()
             );
-            let mut query = world.query::<(&MobType, All<&dyn Replicated>)>();
-            Self::serialize_spawned(&mut inner.pending_full_sync, query.iter(world)).await;
+            let mut query = world.query::<(&MobComponent, All<&dyn Replicated>)>();
+            Self::serialize_spawned(world, &mut inner.pending_full_sync, query.iter(world)).await;
 
             let mut drained = inner.pending_full_sync.drain(..).collect::<Vec<_>>();
             inner.clients.append(&mut drained);

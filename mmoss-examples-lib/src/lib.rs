@@ -2,6 +2,7 @@ use bevy::ecs::component::Component;
 use bincode::{Decode, Encode};
 use mmoss::{self, replication::Id};
 
+use mmoss::replication;
 use mmoss_proc_macros::Replicated;
 use sdl2::{pixels::Color, render::Canvas};
 
@@ -71,42 +72,74 @@ impl RenderComponent {
 
 pub mod mob {
     use bevy::ecs::{entity::Entity, world::World};
-    use mmoss::replication::{Id, MobType, Replicated};
+    use mmoss::{
+        core::mob::MobComponent,
+        replication::{Id, MobType, Replicated},
+    };
 
     use super::*;
 
     pub const SQUARE_TYPE: MobType = MobType(5);
 
-    pub fn square_client(world: &mut World, replicated: &[(Id, Vec<u8>)]) -> anyhow::Result<()> {
-        if replicated.len() != 2 {
+    pub fn square_client(
+        world: &mut World,
+        replicated: &[(usize, Id, Vec<u8>)],
+    ) -> anyhow::Result<Entity> {
+        if replicated.len() != 3 {
             return Err(anyhow::anyhow!(
-                "Expected 1 replicated component, got {}",
+                "Expected 3 replicated components, got {}",
                 replicated.len()
             ));
         }
 
-        let mut replicated_component = ReplicatedComponent::new(replicated[0].0);
-        replicated_component.replicate(&replicated[0].1)?;
+        let mob_index = replicated
+            .iter()
+            .position(|(index, _, _)| {
+                *index == world.component_id::<MobComponent>().unwrap().index()
+            })
+            .ok_or_else(|| anyhow::anyhow!("MobComponent ID not found"))?;
+        let mut mob_component = MobComponent::new(replicated[mob_index].1, SQUARE_TYPE);
+        mob_component.replicate(&replicated[mob_index].2)?;
 
-        let mut render_component = RenderComponent::new(replicated[1].0);
-        render_component.replicate(&replicated[1].1)?;
+        let replicated_index = replicated
+            .iter()
+            .position(|(index, _, _)| {
+                *index == world.component_id::<ReplicatedComponent>().unwrap().index()
+            })
+            .ok_or_else(|| anyhow::anyhow!("ReplicatedComponent ID not found"))?;
+        let mut replicated_component = ReplicatedComponent::new(replicated[replicated_index].1);
+        replicated_component.replicate(&replicated[replicated_index].2)?;
 
-        let _ = world.spawn((SQUARE_TYPE, replicated_component, render_component));
-        Ok(())
+        let render_index = replicated
+            .iter()
+            .position(|(index, _, _)| {
+                *index == world.component_id::<RenderComponent>().unwrap().index()
+            })
+            .ok_or_else(|| anyhow::anyhow!("RenderComponent ID not found"))?;
+        let mut render_component = RenderComponent::new(replicated[render_index].1);
+        render_component.replicate(&replicated[render_index].2)?;
+
+        Ok(world
+            .spawn((mob_component, replicated_component, render_component))
+            .id())
     }
 
     pub fn square_server(
         world: &mut World,
+        mob_id: Id,
         replicated_data: (Id, ReplicatedData),
         render_data: (Id, (u8, u8, u8)),
     ) -> anyhow::Result<Entity> {
+        let mut mob_component = MobComponent::new(mob_id, SQUARE_TYPE);
+        mob_component.mob_type = SQUARE_TYPE;
+
         let mut replicated_component = ReplicatedComponent::new(replicated_data.0);
         replicated_component.replicated = replicated_data.1;
 
         let mut render_component = RenderComponent::new(render_data.0);
         render_component.color = render_data.1;
         Ok(world
-            .spawn((SQUARE_TYPE, replicated_component, render_component))
+            .spawn((mob_component, replicated_component, render_component))
             .id())
     }
 }

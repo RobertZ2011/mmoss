@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use anyhow::Result;
-use bevy::prelude::World;
+use bevy::{ecs::entity::Entity, prelude::World};
 use log::{error, trace};
 use tokio::sync::Mutex;
 
@@ -104,7 +104,8 @@ impl<'f> Manager<'f> {
 }
 
 pub struct Factory {
-    prototypes: HashMap<MobType, Box<dyn Fn(&mut World, &[(Id, Vec<u8>)]) -> Result<()> + Sync>>,
+    prototypes:
+        HashMap<MobType, Box<dyn Fn(&mut World, &[(usize, Id, Vec<u8>)]) -> Result<Entity> + Sync>>,
 }
 
 impl Factory {
@@ -114,9 +115,9 @@ impl Factory {
         }
     }
 
-    pub fn register<F>(&mut self, mob_type: MobType, constructor: F)
+    pub fn register_mob<F>(&mut self, mob_type: MobType, constructor: F)
     where
-        F: 'static + Fn(&mut World, &[(Id, Vec<u8>)]) -> Result<()> + Sync,
+        F: 'static + Fn(&mut World, &[(usize, Id, Vec<u8>)]) -> Result<Entity> + Sync,
     {
         self.prototypes.insert(mob_type, Box::new(constructor));
     }
@@ -125,8 +126,8 @@ impl Factory {
         &self,
         world: &mut World,
         mob_type: MobType,
-        replicated: &Vec<(Id, Vec<u8>)>,
-    ) -> Result<()> {
+        replicated: &Vec<(usize, Id, Vec<u8>)>,
+    ) -> Result<Entity> {
         let constructor = self.prototypes.get(&mob_type).ok_or_else(|| {
             anyhow::anyhow!("No prototype registered for mob type {:?}", mob_type)
         })?;

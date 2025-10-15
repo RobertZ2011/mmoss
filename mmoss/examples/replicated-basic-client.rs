@@ -1,5 +1,6 @@
 use bevy::ecs::world::World;
 use bevy_trait_query::RegisterExt;
+use mmoss::core::mob::MobComponent;
 use mmoss::net::transport::tcp;
 use mmoss::replication::client::{Factory, Manager};
 use mmoss::replication::{Id, MessageFactoryNew, Replicated};
@@ -30,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut canvas = window.into_canvas().build().unwrap();
 
     let mut mob_factory = Factory::new();
-    mob_factory.register(SQUARE_TYPE, mmoss_examples_lib::mob::square_client);
+    mob_factory.register_mob(SQUARE_TYPE, mmoss_examples_lib::mob::square_client);
 
     static FACTORY: StaticCell<Factory> = StaticCell::new();
     let factory = FACTORY.init(mob_factory);
@@ -49,6 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut world = World::new();
     world.register_component_as::<dyn Replicated, ReplicatedComponent>();
     world.register_component_as::<dyn Replicated, RenderComponent>();
+    world.register_component_as::<dyn Replicated, MobComponent>();
 
     world.spawn(ReplicatedComponent::new(Id(0)));
 
