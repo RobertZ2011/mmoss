@@ -11,10 +11,19 @@ pub struct MobComponent {
     pub id: Id,
     // Not #[replicated] because the server handles this field directly
     pub mob_type: MobType,
+    #[replicated(into_from = crate::replication::convert::Vec3)]
+    pub position: bevy::math::Vec3,
+    #[replicated(into_from = crate::replication::convert::Quat)]
+    pub rotation: bevy::math::Quat,
 }
 
 impl MobComponent {
     pub fn new(id: Id, mob_type: MobType) -> Self {
-        Self { id, mob_type }
+        Self {
+            id,
+            mob_type,
+            position: bevy::math::Vec3::ZERO,
+            rotation: bevy::math::Quat::IDENTITY,
+        }
     }
 }

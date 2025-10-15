@@ -7,6 +7,7 @@ use mmoss_proc_macros::Replicated;
 use crate::net::transport::{Message as MessageTrait, MessageFactory as MessageFactoryTrait};
 
 pub mod client;
+pub mod convert;
 pub mod server;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode)]
