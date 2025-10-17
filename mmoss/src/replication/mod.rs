@@ -1,5 +1,8 @@
 use anyhow::Result;
-use bevy::ecs::{component::ComponentId, world::World};
+use bevy::ecs::{
+    component::{Component, ComponentId},
+    world::World,
+};
 use bevy_trait_query::queryable;
 use bincode::{Decode, Encode};
 use mmoss_proc_macros::Replicated;
@@ -14,7 +17,7 @@ pub mod server;
 #[repr(transparent)]
 pub struct Id(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode, Component)]
 #[repr(transparent)]
 pub struct MobType(pub u32);
 

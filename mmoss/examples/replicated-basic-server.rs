@@ -2,7 +2,6 @@ use bevy::ecs::world::World;
 use bevy_trait_query::RegisterExt;
 use log::info;
 use mmoss::{
-    core::mob::MobComponent,
     net::transport::tcp,
     replication::{Id, MessageFactoryNew, Replicated, server::Manager},
 };
@@ -38,7 +37,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut world = World::new();
     world.register_component_as::<dyn Replicated, ReplicatedComponent>();
     world.register_component_as::<dyn Replicated, RenderComponent>();
-    world.register_component_as::<dyn Replicated, MobComponent>();
 
     let mut manager = Manager::new();
     manager.add_client(Box::new(connection)).await;
@@ -60,21 +58,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     id.0 += 1;
                     let id1 = id;
                     id.0 += 1;
-                    let id2 = id;
-                    id.0 += 1;
 
                     let entity = square_server(
                         &mut world,
-                        id0,
                         (
-                            id1,
+                            id0,
                             ReplicatedData {
                                 position: (x, y),
                                 rotation: 360.0 * rng.random::<f32>(),
                             },
                         ),
                         (
-                            id2,
+                            id1,
                             (rng.random::<u8>(), rng.random::<u8>(), rng.random::<u8>()),
                         ),
                     )

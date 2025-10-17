@@ -72,10 +72,7 @@ impl RenderComponent {
 
 pub mod mob {
     use bevy::ecs::{entity::Entity, world::World};
-    use mmoss::{
-        core::mob::MobComponent,
-        replication::{Id, MobType, Replicated},
-    };
+    use mmoss::replication::{Id, MobType, Replicated};
 
     use super::*;
 
@@ -85,21 +82,12 @@ pub mod mob {
         world: &mut World,
         replicated: &[(usize, Id, Vec<u8>)],
     ) -> anyhow::Result<Entity> {
-        if replicated.len() != 3 {
+        if replicated.len() != 2 {
             return Err(anyhow::anyhow!(
-                "Expected 3 replicated components, got {}",
+                "Expected 2 replicated components, got {}",
                 replicated.len()
             ));
         }
-
-        let mob_index = replicated
-            .iter()
-            .position(|(index, _, _)| {
-                *index == world.component_id::<MobComponent>().unwrap().index()
-            })
-            .ok_or_else(|| anyhow::anyhow!("MobComponent ID not found"))?;
-        let mut mob_component = MobComponent::new(replicated[mob_index].1, SQUARE_TYPE);
-        mob_component.replicate(&replicated[mob_index].2)?;
 
         let replicated_index = replicated
             .iter()
@@ -120,26 +108,22 @@ pub mod mob {
         render_component.replicate(&replicated[render_index].2)?;
 
         Ok(world
-            .spawn((mob_component, replicated_component, render_component))
+            .spawn((SQUARE_TYPE, replicated_component, render_component))
             .id())
     }
 
     pub fn square_server(
         world: &mut World,
-        mob_id: Id,
         replicated_data: (Id, ReplicatedData),
         render_data: (Id, (u8, u8, u8)),
     ) -> anyhow::Result<Entity> {
-        let mut mob_component = MobComponent::new(mob_id, SQUARE_TYPE);
-        mob_component.mob_type = SQUARE_TYPE;
-
         let mut replicated_component = ReplicatedComponent::new(replicated_data.0);
         replicated_component.replicated = replicated_data.1;
 
         let mut render_component = RenderComponent::new(render_data.0);
         render_component.color = render_data.1;
         Ok(world
-            .spawn((mob_component, replicated_component, render_component))
+            .spawn((SQUARE_TYPE, replicated_component, render_component))
             .id())
     }
 }

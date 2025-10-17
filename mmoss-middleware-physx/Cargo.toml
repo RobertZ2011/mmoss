@@ -1,0 +1,10 @@
+[package]
+name = "mmoss-middleware-physx"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+physx = "0.19.0"
+physx-sys = "0.11.5"
+mmoss = { path = "../mmoss"}
+mmoss-proc-macros = { path = "../mmoss-proc-macros"}
