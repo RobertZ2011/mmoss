@@ -8,3 +8,9 @@ physx = "0.19.0"
 physx-sys = "0.11.5"
 mmoss = { path = "../mmoss"}
 mmoss-proc-macros = { path = "../mmoss-proc-macros"}
+bevy = { workspace = true, features = ["std"]}
+anyhow.workspace = true
+bincode.workspace = true
+tokio.workspace = true
+bevy-trait-query.workspace = true
+log.workspace = true

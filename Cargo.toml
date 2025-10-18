@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["mmoss", "mmoss-examples-lib", "mmoss-middleware-physx", "mmoss-proc-macros"]
+members = ["mmoss", "mmoss-examples", "mmoss-middleware-physx", "mmoss-proc-macros"]
 
 [workspace.dependencies]
 async-trait = "0.1.89"
