@@ -2,15 +2,14 @@ use bevy::ecs::world::World;
 use bevy_trait_query::RegisterExt;
 use mmoss::net::transport::tcp;
 use mmoss::replication::client::{Factory, Manager};
-use mmoss::replication::{Id, MessageFactoryNew, Replicated};
+use mmoss::replication::{MessageFactoryNew, Replicated};
 
 use env_logger;
 use mmoss_examples_lib::mob::SQUARE_TYPE;
-use mmoss_examples_lib::{RenderComponent, ReplicatedComponent};
+use mmoss_examples_lib::{RenderComponent, TransformComponent};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
-use static_cell::StaticCell;
 use std::time::Duration;
 
 #[tokio::main]
@@ -32,25 +31,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut mob_factory = Factory::new();
     mob_factory.register_mob(SQUARE_TYPE, mmoss_examples_lib::mob::square_client);
 
-    static FACTORY: StaticCell<Factory> = StaticCell::new();
-    let factory = FACTORY.init(mob_factory);
+    let (mut manager, mut incoming) = Manager::new(Box::new(connection), &mob_factory);
 
-    static MANAGER: StaticCell<Manager> = StaticCell::new();
-    let manager = MANAGER.init(Manager::new(Box::new(connection), factory));
-
-    tokio::spawn(async {
+    tokio::spawn(async move {
         loop {
-            if let Err(e) = manager.process_incoming().await {
+            if let Err(e) = incoming.process_incoming().await {
                 eprintln!("Error processing incoming messages: {}", e);
             }
         }
     });
 
     let mut world = World::new();
-    world.register_component_as::<dyn Replicated, ReplicatedComponent>();
+    world.register_component_as::<dyn Replicated, TransformComponent>();
     world.register_component_as::<dyn Replicated, RenderComponent>();
-
-    world.spawn(ReplicatedComponent::new(Id(0)));
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -70,20 +63,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
 
-        for (render, replicated) in world
-            .query::<(&RenderComponent, &ReplicatedComponent)>()
+        for (render, transform) in world
+            .query::<(&RenderComponent, &TransformComponent)>()
             .iter(&world)
         {
-            canvas.set_draw_color(render.color);
-            canvas.draw_line(
-                replicated.replicated.position,
-                (
-                    (50.0 * replicated.replicated.rotation.to_radians().cos()) as i32
-                        + replicated.replicated.position.0,
-                    (50.0 * replicated.replicated.rotation.to_radians().sin()) as i32
-                        + replicated.replicated.position.1,
-                ),
-            )?;
+            render.render(&mut canvas, transform.position)?;
         }
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));

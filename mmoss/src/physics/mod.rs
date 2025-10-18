@@ -1,4 +1,7 @@
-use bevy::math::{Quat, Vec3};
+use bevy::{
+    ecs::component::Component,
+    math::{Quat, Vec3},
+};
 
 pub struct Transform {
     pub position: Vec3,
@@ -11,28 +14,43 @@ pub struct Material {
     pub restitution: f32,
 }
 
+pub enum DynamicShape {}
+
+pub enum StaticShape {}
+
 /// Core actor trait for components
-pub trait Actor {
+pub trait StaticActorComponent: Component {
     fn transform(&self) -> &Transform;
 }
 
-pub trait DynamicActor: Actor {
+pub trait DynamicActorComponent: Component {
+    fn transform(&self) -> &Transform;
     fn transform_mut(&mut self) -> &mut Transform;
 }
 
 pub trait Engine {
-    fn create_world(&mut self) -> Box<dyn World>;
+    type WorldType: World;
+
+    fn create_world(&mut self, gravity: Vec3) -> Self::WorldType;
 }
 
 pub trait World {
-    fn step(&mut self, delta_time: f32);
+    type StaticActorComponentType: StaticActorComponent;
+    type DynamicActorComponentType: DynamicActorComponent;
 
-    fn create_dynamic_cube(
+    fn step(&mut self, delta_time: f32);
+    fn update_world(&mut self, world: &mut bevy::ecs::world::World);
+
+    fn create_dynamic_actor_component(
         &mut self,
         transform: Transform,
         material: Material,
         density: f32,
-    ) -> Box<dyn DynamicActor>;
+    ) -> Self::DynamicActorComponentType;
 
-    fn create_static_plane(&mut self, transform: Transform, material: Material) -> Box<dyn Actor>;
+    fn create_static_actor_component(
+        &mut self,
+        transform: Transform,
+        material: Material,
+    ) -> Self::StaticActorComponentType;
 }

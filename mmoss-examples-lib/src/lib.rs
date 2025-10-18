@@ -4,29 +4,24 @@ use mmoss::{self, replication::Id};
 
 use mmoss::replication;
 use mmoss_proc_macros::Replicated;
+use sdl2::rect::Rect;
 use sdl2::{pixels::Color, render::Canvas};
 
 use anyhow::{Result, anyhow};
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode, Default)]
-pub struct ReplicatedData {
-    pub rotation: f32,
-    pub position: (i32, i32),
-}
-
 #[derive(Debug, Clone, Component, Replicated)]
-pub struct ReplicatedComponent {
+pub struct TransformComponent {
     #[replication_id]
     pub id: Id,
     #[replicated]
-    pub replicated: ReplicatedData,
+    pub position: (i32, i32),
 }
 
-impl ReplicatedComponent {
+impl TransformComponent {
     pub fn new(id: Id) -> Self {
         Self {
             id,
-            replicated: ReplicatedData::default(),
+            position: (0, 0),
         }
     }
 }
@@ -52,20 +47,12 @@ impl RenderComponent {
     pub fn render(
         &self,
         canvas: &mut Canvas<sdl2::video::Window>,
-        rotation: f32,
         position: (i32, i32),
-        (r, g, b): (u8, u8, u8),
     ) -> Result<()> {
-        canvas.set_draw_color(Color::RGB(r, g, b));
+        canvas.set_draw_color(Color::RGB(self.color.0, self.color.1, self.color.2));
         canvas
-            .draw_line(
-                position,
-                (
-                    (50.0 * rotation.to_radians().cos()) as i32 + position.0,
-                    (50.0 * rotation.to_radians().sin()) as i32 + position.1,
-                ),
-            )
-            .map_err(|e| anyhow!("Failed to draw line: {}", e))?;
+            .draw_rect(Rect::from_center(position, 50, 50))
+            .map_err(|e| anyhow!("Failed to draw rect: {}", e))?;
         Ok(())
     }
 }
@@ -92,10 +79,10 @@ pub mod mob {
         let replicated_index = replicated
             .iter()
             .position(|(index, _, _)| {
-                *index == world.component_id::<ReplicatedComponent>().unwrap().index()
+                *index == world.component_id::<TransformComponent>().unwrap().index()
             })
             .ok_or_else(|| anyhow::anyhow!("ReplicatedComponent ID not found"))?;
-        let mut replicated_component = ReplicatedComponent::new(replicated[replicated_index].1);
+        let mut replicated_component = TransformComponent::new(replicated[replicated_index].1);
         replicated_component.replicate(&replicated[replicated_index].2)?;
 
         let render_index = replicated
@@ -114,11 +101,11 @@ pub mod mob {
 
     pub fn square_server(
         world: &mut World,
-        replicated_data: (Id, ReplicatedData),
+        replicated_data: (Id, (i32, i32)),
         render_data: (Id, (u8, u8, u8)),
     ) -> anyhow::Result<Entity> {
-        let mut replicated_component = ReplicatedComponent::new(replicated_data.0);
-        replicated_component.replicated = replicated_data.1;
+        let mut replicated_component = TransformComponent::new(replicated_data.0);
+        replicated_component.position = replicated_data.1;
 
         let mut render_component = RenderComponent::new(render_data.0);
         render_component.color = render_data.1;

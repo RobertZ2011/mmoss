@@ -6,56 +6,43 @@ use bevy::ecs::{
 };
 use bevy_trait_query::{All, ReadTraits};
 use log::{error, trace};
-use tokio::sync::Mutex;
 
 use crate::{
     net::transport::Reliable,
     replication::{Message, MobType, Replicated, SpawnData, UpdateData},
 };
 
-struct Inner {
+pub struct Manager {
     /// All connected clients
     clients: Vec<Box<dyn Reliable<Message>>>,
     /// All connected clients that are pending their first full state sync
     pending_full_sync: Vec<Box<dyn Reliable<Message>>>,
     /// Newly spawned entities that need to be sent to clients
     newly_spawned: EntityHashSet,
-}
-
-impl Inner {
-    pub fn new() -> Self {
-        Self {
-            clients: Vec::new(),
-            pending_full_sync: Vec::new(),
-            newly_spawned: EntityHashSet::new(),
-        }
-    }
-}
-
-pub struct Manager {
-    inner: Mutex<Inner>,
     /// All objects that have changed since the last update
-    dirty: Mutex<EntityHashSet>,
+    dirty: EntityHashSet,
 }
 
 impl Manager {
     pub fn new() -> Self {
         Self {
-            inner: Mutex::new(Inner::new()),
-            dirty: Mutex::new(EntityHashSet::new()),
+            clients: Vec::new(),
+            pending_full_sync: Vec::new(),
+            newly_spawned: EntityHashSet::new(),
+            dirty: EntityHashSet::new(),
         }
     }
 
-    pub async fn add_client(&mut self, client: Box<dyn Reliable<Message>>) {
-        self.inner.lock().await.pending_full_sync.push(client);
+    pub fn add_client(&mut self, client: Box<dyn Reliable<Message>>) {
+        self.pending_full_sync.push(client);
     }
 
-    pub async fn mark_dirty(&self, entity: Entity) {
-        self.dirty.lock().await.insert(entity);
+    pub fn mark_dirty(&mut self, entity: Entity) {
+        self.dirty.insert(entity);
     }
 
-    pub async fn register_new_entity(&self, entity: Entity) {
-        self.inner.lock().await.newly_spawned.insert(entity);
+    pub fn register_new_entity(&mut self, entity: Entity) {
+        self.newly_spawned.insert(entity);
     }
 
     async fn serialize_spawned<'a>(
@@ -102,16 +89,13 @@ impl Manager {
         }
     }
 
-    pub async fn serialize(&self, world: &mut World) {
-        let mut inner = self.inner.lock().await;
-
-        let dirty = self.dirty.lock().await.drain().collect::<Vec<_>>();
-        if !dirty.is_empty() {
-            trace!("Dirty entities: {:?}", dirty.len());
+    pub async fn serialize(&mut self, world: &mut World) {
+        if !self.dirty.is_empty() {
+            trace!("Dirty entities: {:?}", self.dirty.len());
         }
 
         let mut query = world.query::<&dyn Replicated>();
-        for replicated in query.iter_many(world, dirty) {
+        for replicated in query.iter_many(world, &self.dirty) {
             for component in replicated {
                 let message = Message::Update(UpdateData {
                     id: component.id(),
@@ -132,34 +116,35 @@ impl Manager {
                     },
                 });
 
-                trace!("Replicating message to {} clients", inner.clients.len());
-                for client in &mut inner.clients {
+                trace!("Replicating message to {} clients", self.clients.len());
+                for client in &mut self.clients {
                     client.send(&message).await.unwrap();
                 }
             }
         }
+        self.dirty.clear();
 
         // Next, handle any newly spawned entities
-        if !inner.newly_spawned.is_empty() {
-            trace!("Newly spawned entities: {:?}", inner.newly_spawned.len());
+        if !self.newly_spawned.is_empty() {
+            trace!("Newly spawned entities: {:?}", self.newly_spawned.len());
             let mut query = world.query::<(&MobType, All<&dyn Replicated>)>();
-            let entities = mem::replace(&mut inner.newly_spawned, EntityHashSet::new());
-            Self::serialize_spawned(world, &mut inner.clients, query.iter_many(world, entities))
+            let entities = mem::replace(&mut self.newly_spawned, EntityHashSet::new());
+            Self::serialize_spawned(world, &mut self.clients, query.iter_many(world, entities))
                 .await;
-            inner.newly_spawned.clear();
+            self.newly_spawned.clear();
         }
 
         // Lastly, handle any clients that are pending their first full state sync
-        if !inner.pending_full_sync.is_empty() {
+        if !self.pending_full_sync.is_empty() {
             trace!(
                 "Clients pending full sync: {}",
-                inner.pending_full_sync.len()
+                self.pending_full_sync.len()
             );
             let mut query = world.query::<(&MobType, All<&dyn Replicated>)>();
-            Self::serialize_spawned(world, &mut inner.pending_full_sync, query.iter(world)).await;
+            Self::serialize_spawned(world, &mut self.pending_full_sync, query.iter(world)).await;
 
-            let mut drained = inner.pending_full_sync.drain(..).collect::<Vec<_>>();
-            inner.clients.append(&mut drained);
+            let mut drained = self.pending_full_sync.drain(..).collect::<Vec<_>>();
+            self.clients.append(&mut drained);
         }
     }
 }

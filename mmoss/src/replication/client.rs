@@ -1,4 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use bevy::{ecs::entity::Entity, prelude::World};
@@ -24,23 +27,14 @@ impl Pending {
     }
 }
 
-pub struct Manager<'f> {
-    transport: Mutex<Box<dyn Unreliable<Message>>>,
-    pending: Mutex<Pending>,
-    mob_factory: &'f Factory,
+pub struct Incoming {
+    transport: Box<dyn Unreliable<Message>>,
+    pending: Arc<Mutex<Pending>>,
 }
 
-impl<'f> Manager<'f> {
-    pub fn new(transport: Box<dyn Unreliable<Message>>, mob_factory: &'f Factory) -> Self {
-        Self {
-            transport: Mutex::new(transport),
-            pending: Mutex::new(Pending::new()),
-            mob_factory,
-        }
-    }
-
-    pub async fn process_incoming(&self) -> Result<()> {
-        let message = self.transport.lock().await.receive().await?;
+impl Incoming {
+    pub async fn process_incoming(&mut self) -> Result<()> {
+        let message = self.transport.receive().await?;
         let mut pending = self.pending.lock().await;
         match message {
             Message::Update(update) => {
@@ -58,8 +52,29 @@ impl<'f> Manager<'f> {
 
         Ok(())
     }
+}
 
-    pub async fn update_world(&self, world: &mut World) {
+pub struct Manager<'f> {
+    pending: Arc<Mutex<Pending>>,
+    mob_factory: &'f Factory,
+}
+
+impl<'f> Manager<'f> {
+    pub fn new(
+        transport: Box<dyn Unreliable<Message>>,
+        mob_factory: &'f Factory,
+    ) -> (Self, Incoming) {
+        let pending = Arc::new(Mutex::new(Pending::new()));
+        (
+            Self {
+                pending: pending.clone(),
+                mob_factory,
+            },
+            Incoming { pending, transport },
+        )
+    }
+
+    pub async fn update_world(&mut self, world: &mut World) {
         // Process spawns
         let spawns = self
             .pending

@@ -6,7 +6,8 @@ use mmoss::{
     replication::{Id, MessageFactoryNew, Replicated, server::Manager},
 };
 use mmoss_examples_lib::{
-    RenderComponent, ReplicatedComponent, ReplicatedData, mob::square_server,
+    RenderComponent, TransformComponent,
+    mob::{SQUARE_TYPE, square_server},
 };
 
 use rand::Rng;
@@ -35,14 +36,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Client connected from {}", addr);
 
     let mut world = World::new();
-    world.register_component_as::<dyn Replicated, ReplicatedComponent>();
+    world.register_component_as::<dyn Replicated, TransformComponent>();
     world.register_component_as::<dyn Replicated, RenderComponent>();
 
     let mut manager = Manager::new();
-    manager.add_client(Box::new(connection)).await;
+    manager.add_client(Box::new(connection));
 
-    let mut id: Id = Id(1);
     let mut rng = rand::rng();
+    let mut render_component = RenderComponent::new(Id(2));
+    render_component.color = (rng.random::<u8>(), rng.random::<u8>(), rng.random::<u8>());
+
+    let mouse_entity = world
+        .spawn((
+            SQUARE_TYPE,
+            TransformComponent::new(Id(1)),
+            render_component,
+        ))
+        .id();
+    manager.register_new_entity(mouse_entity);
+
+    let mut id: Id = Id(3);
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -61,13 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let entity = square_server(
                         &mut world,
-                        (
-                            id0,
-                            ReplicatedData {
-                                position: (x, y),
-                                rotation: 360.0 * rng.random::<f32>(),
-                            },
-                        ),
+                        (id0, (x, y)),
                         (
                             id1,
                             (rng.random::<u8>(), rng.random::<u8>(), rng.random::<u8>()),
@@ -75,7 +82,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     )
                     .unwrap();
 
-                    manager.register_new_entity(entity).await;
+                    manager.register_new_entity(entity);
+                }
+                Event::MouseMotion { x, y, .. } => {
+                    if let Ok(mut transform) = world
+                        .query::<&mut TransformComponent>()
+                        .get_mut(&mut world, mouse_entity)
+                    {
+                        transform.position = (x, y);
+                    }
+                    manager.mark_dirty(mouse_entity);
                 }
                 _ => {}
             }
@@ -86,20 +102,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
 
-        for (render, replicated) in world
-            .query::<(&RenderComponent, &ReplicatedComponent)>()
+        for (render, transform) in world
+            .query::<(&RenderComponent, &TransformComponent)>()
             .iter(&world)
         {
-            canvas.set_draw_color(render.color);
-            canvas.draw_line(
-                replicated.replicated.position,
-                (
-                    (50.0 * replicated.replicated.rotation.to_radians().cos()) as i32
-                        + replicated.replicated.position.0,
-                    (50.0 * replicated.replicated.rotation.to_radians().sin()) as i32
-                        + replicated.replicated.position.1,
-                ),
-            )?;
+            render.render(&mut canvas, transform.position)?;
         }
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
