@@ -10,6 +10,9 @@ use mmoss_proc_macros::Replicated;
 use sdl2::rect::Rect;
 use sdl2::{pixels::Color, render::Canvas};
 
+#[cfg(feature = "ffi")]
+pub mod ffi;
+
 use anyhow::{Result, anyhow};
 
 const RENDER_COMPONENT_TYPE: ComponentType = ComponentType(100);

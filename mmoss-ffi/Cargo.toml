@@ -1,0 +1,17 @@
+[package]
+name = "mmoss-ffi"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+mmoss = { path = "../mmoss"}
+bevy.workspace = true
+tokio.workspace = true
+log.workspace = true
+bevy-trait-query.workspace = true
+
+[build-dependencies]
+cbindgen.workspace = true

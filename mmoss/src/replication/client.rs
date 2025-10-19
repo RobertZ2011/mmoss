@@ -54,15 +54,15 @@ impl Incoming {
     }
 }
 
-pub struct Manager<'f, W: WorldContainer> {
+pub struct Manager<W: WorldContainer> {
     pending: Arc<Mutex<Pending>>,
-    mob_factory: &'f Factory<W>,
+    mob_factory: Arc<Factory<W>>,
 }
 
-impl<'f, W: WorldContainer> Manager<'f, W> {
+impl<W: WorldContainer> Manager<W> {
     pub fn new(
         transport: Box<dyn Unreliable<Message>>,
-        mob_factory: &'f Factory<W>,
+        mob_factory: Arc<Factory<W>>,
     ) -> (Self, Incoming) {
         let pending = Arc::new(Mutex::new(Pending::new()));
         (

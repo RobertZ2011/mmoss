@@ -13,6 +13,7 @@ use mmoss_examples_lib::mob::SQUARE_TYPE;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -35,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut mob_factory = Factory::new();
     mob_factory.register_mob(SQUARE_TYPE, mmoss_examples_lib::mob::SquareClient);
 
-    let (mut manager, mut incoming) = Manager::new(Box::new(connection), &mob_factory);
+    let (mut manager, mut incoming) = Manager::new(Box::new(connection), Arc::new(mob_factory));
 
     tokio::spawn(async move {
         loop {
