@@ -5,16 +5,18 @@ use bevy::{
     ecs::{component::Component, entity::Entity},
     math::Vec3,
 };
-use bevy_trait_query::One;
-use log::{error, trace};
+use log::error;
 use mmoss::{
-    core::component_type::physics::{DYNAMIC_ACTOR_COMPONENT_TYPE, STATIC_ACTOR_COMPONENT_TYPE},
-    physics::{self, Shape, Transform},
+    core::component_type::physics::{
+        DYNAMIC_ACTOR_COMPONENT_TYPE, DYNAMIC_ACTOR_PROXY_COMPONENT_TYPE,
+        STATIC_ACTOR_COMPONENT_TYPE, STATIC_ACTOR_PROXY_COMPONENT_TYPE,
+    },
+    physics::{self, DynamicActorComponent as _, Shape, Transform},
     replication::{self, Id},
 };
 use mmoss_proc_macros::Replicated;
 use physx::{prelude::*, traits::Class as _};
-use physx_sys::PxSceneFlags;
+use physx_sys::{PxScene_getActiveActors_mut, PxSceneFlags};
 use tokio::sync::Mutex;
 
 type PxMaterial = physx::material::PxMaterial<Entity>;
@@ -249,9 +251,16 @@ impl<Allocator: AllocatorCallback> physics::World for World<Allocator> {
             )
             .map_err(|e| anyhow!("Failed to step physics scene: {}", e))?;
 
-        let mut query = world.query::<One<&mut dyn physics::DynamicActorComponent>>();
+        unsafe {
+            let mut length = 0;
+            let _ = PxScene_getActiveActors_mut(self.scene.as_mut_ptr(), &mut length);
+            if length == 0 {
+                return Ok(());
+            }
+        }
+
+        let mut query = world.query::<&mut DynamicActorComponent>();
         let actors = self.scene.get_active_actors();
-        trace!("Active actors: {}", actors.len());
         for actor in actors {
             if let Some(dynamic) = actor.as_rigid_dynamic() {
                 let entity = dynamic.get_user_data();
@@ -412,8 +421,17 @@ impl<Allocator: AllocatorCallback> physics::World for World<Allocator> {
     }
 }
 
+impl<Allocator: AllocatorCallback> physics::WorldContainer for World<Allocator> {
+    type WorldType = World<Allocator>;
+
+    fn world_mut(&mut self) -> &mut Self::WorldType {
+        self
+    }
+}
+
 #[derive(Component, Replicated)]
 #[component_type(STATIC_ACTOR_COMPONENT_TYPE)]
+#[replicated_component_type(STATIC_ACTOR_PROXY_COMPONENT_TYPE)]
 pub struct StaticActorComponent {
     #[replication_id]
     pub id: Id,
@@ -431,6 +449,7 @@ impl physics::StaticActorComponent for StaticActorComponent {}
 
 #[derive(Component, Replicated)]
 #[component_type(DYNAMIC_ACTOR_COMPONENT_TYPE)]
+#[replicated_component_type(DYNAMIC_ACTOR_PROXY_COMPONENT_TYPE)]
 pub struct DynamicActorComponent {
     #[replication_id]
     pub id: Id,
@@ -447,5 +466,28 @@ impl physics::TransformComponent for DynamicActorComponent {
 impl physics::DynamicActorComponent for DynamicActorComponent {
     fn transform_mut(&mut self) -> &mut Transform {
         &mut self.transform
+    }
+}
+
+pub struct CombinedWorld<Allocator: AllocatorCallback> {
+    pub bevy_world: bevy::ecs::world::World,
+    pub physics_world: World<Allocator>,
+}
+
+impl<Allocator: AllocatorCallback> physics::WorldContainer for CombinedWorld<Allocator> {
+    type WorldType = World<Allocator>;
+
+    fn world_mut(&mut self) -> &mut Self::WorldType {
+        &mut self.physics_world
+    }
+}
+
+impl<Allocator: AllocatorCallback> mmoss::core::WorldContainer for CombinedWorld<Allocator> {
+    fn world(&self) -> &bevy::ecs::world::World {
+        &self.bevy_world
+    }
+
+    fn world_mut(&mut self) -> &mut bevy::ecs::world::World {
+        &mut self.bevy_world
     }
 }

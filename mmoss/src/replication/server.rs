@@ -5,7 +5,7 @@ use bevy::ecs::{
     world::World,
 };
 use bevy_trait_query::{All, ReadTraits};
-use log::{error, trace};
+use log::{debug, error, trace};
 
 use crate::{
     net::transport::Reliable,
@@ -94,8 +94,10 @@ impl Manager {
         }
 
         let mut query = world.query::<&dyn Replicated>();
+        let mut num_replicated = 0;
         for replicated in query.iter_many(world, &self.dirty) {
             for component in replicated {
+                num_replicated += 1;
                 let message = Message::Update(UpdateData {
                     id: component.id(),
                     data: {
@@ -115,12 +117,13 @@ impl Manager {
                     },
                 });
 
-                trace!("Replicating message to {} clients", self.clients.len());
+                trace!("Replicating message {:?}", message);
                 for client in &mut self.clients {
                     client.send(&message).await.unwrap();
                 }
             }
         }
+        debug!("Replicated {} components", num_replicated);
         self.dirty.clear();
 
         // Next, handle any newly spawned entities

@@ -1,5 +1,6 @@
 use bevy::ecs::world::World;
 use bevy_trait_query::{One, RegisterExt};
+use log::error;
 use mmoss::net::transport::tcp;
 use mmoss::physics::TransformComponent;
 use mmoss::physics::proxy::DynamicActorComponentProxy;
@@ -13,6 +14,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use std::time::Duration;
+use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let video_subsystem = sdl_context.video().unwrap();
 
     let window = video_subsystem
-        .window("Client", 800, 600)
+        .window("Client", 600, 600)
         .position_centered()
         .build()
         .unwrap();
@@ -31,14 +33,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut canvas = window.into_canvas().build().unwrap();
 
     let mut mob_factory = Factory::new();
-    mob_factory.register_mob(SQUARE_TYPE, mmoss_examples_lib::mob::square_client);
+    mob_factory.register_mob(SQUARE_TYPE, mmoss_examples_lib::mob::SquareClient);
 
     let (mut manager, mut incoming) = Manager::new(Box::new(connection), &mob_factory);
 
     tokio::spawn(async move {
         loop {
             if let Err(e) = incoming.process_incoming().await {
-                eprintln!("Error processing incoming messages: {}", e);
+                error!("Error processing incoming messages: {}", e);
             }
         }
     });
@@ -73,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             render.render(&mut canvas, transform.into_inner())?;
         }
         canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+        sleep(Duration::from_secs_f32(1.0 / 30.0)).await;
     }
 
     Ok(())

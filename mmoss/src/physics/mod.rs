@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bevy::{
-    ecs::entity::Entity,
+    ecs::{component::Component, entity::Entity},
     math::{Quat, Vec3},
 };
 use bevy_trait_query::queryable;
@@ -100,8 +100,8 @@ pub trait Engine {
 }
 
 pub trait World {
-    type StaticActorComponentType: StaticActorComponent;
-    type DynamicActorComponentType: DynamicActorComponent;
+    type StaticActorComponentType: StaticActorComponent + Component;
+    type DynamicActorComponentType: DynamicActorComponent + Component;
 
     fn update_world(&mut self, world: &mut bevy::ecs::world::World, delta_time: f32) -> Result<()>;
 
@@ -131,4 +131,10 @@ pub trait World {
         material: &Material,
         shapes: &[(Shape, Transform)],
     ) -> impl Future<Output = Result<Self::StaticActorComponentType>>;
+}
+
+pub trait WorldContainer {
+    type WorldType: World;
+
+    fn world_mut(&mut self) -> &mut Self::WorldType;
 }

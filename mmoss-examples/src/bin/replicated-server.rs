@@ -8,7 +8,7 @@ use mmoss::{
 };
 use mmoss_examples_lib::{
     RenderComponent,
-    mob::{SQUARE_TYPE, square_server},
+    mob::{SQUARE_TYPE, square_server_no_physics},
 };
 
 use rand::Rng;
@@ -16,6 +16,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use std::time::Duration;
+use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let video_subsystem = sdl_context.video().unwrap();
 
     let window = video_subsystem
-        .window("Server", 800, 600)
+        .window("Server", 600, 600)
         .position_centered()
         .build()
         .unwrap();
@@ -74,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let id1 = id;
                     id.0 += 1;
 
-                    let entity = square_server(
+                    let entity = square_server_no_physics(
                         &mut world,
                         (
                             id0,
@@ -118,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             render.render(&mut canvas, transform.into_inner())?;
         }
         canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+        sleep(Duration::from_secs_f32(1.0 / 30.0)).await;
     }
 
     Ok(())

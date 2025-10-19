@@ -1,12 +1,16 @@
 use quote::quote;
 use syn::{Data, DeriveInput, Expr, Meta, parse_macro_input};
 
-#[proc_macro_derive(Replicated, attributes(replicated, replication_id, component_type))]
+#[proc_macro_derive(
+    Replicated,
+    attributes(replicated, replication_id, component_type, replicated_component_type)
+)]
 pub fn derive_replicated(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     let name = input.ident;
     let mut component_type = None;
+    let mut replicated_component_type = None;
 
     for attr in &input.attrs {
         if attr.path().is_ident("component_type") {
@@ -22,6 +26,23 @@ pub fn derive_replicated(input: proc_macro::TokenStream) -> proc_macro::TokenStr
 
             component_type = Some(expr.unwrap());
         }
+
+        if attr.path().is_ident("replicated_component_type") {
+            let expr = attr.parse_args::<Expr>();
+            if let Err(e) = expr {
+                return syn::Error::new_spanned(
+                    attr,
+                    format!(
+                        "replicated_component_type must be a valid expression: {}",
+                        e
+                    ),
+                )
+                .to_compile_error()
+                .into();
+            }
+
+            replicated_component_type = Some(expr.unwrap());
+        }
     }
 
     if component_type.is_none() {
@@ -32,6 +53,8 @@ pub fn derive_replicated(input: proc_macro::TokenStream) -> proc_macro::TokenStr
         .to_compile_error()
         .into();
     }
+
+    replicated_component_type = replicated_component_type.or_else(|| component_type.clone());
 
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -141,7 +164,7 @@ pub fn derive_replicated(input: proc_macro::TokenStream) -> proc_macro::TokenStr
             }
 
             fn replicated_component_type(&self) -> replication::ComponentType {
-                #component_type
+                #replicated_component_type
             }
 
             fn component_type(&self) -> replication::ComponentType {

@@ -3,6 +3,9 @@ name = "mmoss-examples"
 version = "0.1.0"
 edition = "2024"
 
+[profile.release]
+debug = true
+
 [dependencies]
 mmoss = { path = "../mmoss"}
 mmoss-proc-macros = { path = "../mmoss-proc-macros"}
