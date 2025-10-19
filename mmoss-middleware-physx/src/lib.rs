@@ -8,6 +8,7 @@ use bevy::{
 use bevy_trait_query::One;
 use log::{error, trace};
 use mmoss::{
+    core::component_type::physics::{DYNAMIC_ACTOR_COMPONENT_TYPE, STATIC_ACTOR_COMPONENT_TYPE},
     physics::{self, Shape, Transform},
     replication::{self, Id},
 };
@@ -257,7 +258,7 @@ impl<Allocator: AllocatorCallback> physics::World for World<Allocator> {
                 if let Ok(mut component) = query.get_mut(world, *entity) {
                     let position = dynamic.get_global_pose().translation();
                     let rotation = dynamic.get_global_pose().rotation();
-                    component.transform_mut().position =
+                    component.transform_mut().translation =
                         Vec3::new(position.x(), position.y(), position.z());
                     component.transform_mut().rotation = bevy::math::Quat::from_xyzw(
                         rotation.x(),
@@ -300,7 +301,7 @@ impl<Allocator: AllocatorCallback> physics::World for World<Allocator> {
         Ok(StaticActorComponent {
             id: replication_id,
             transform: Transform {
-                position: shape.normal * shape.offset,
+                translation: shape.normal * shape.offset,
                 rotation: bevy::math::Quat::IDENTITY,
             },
         })
@@ -328,9 +329,9 @@ impl<Allocator: AllocatorCallback> physics::World for World<Allocator> {
             .create_dynamic(
                 &PxTransform::from_translation_rotation(
                     &PxVec3::new(
-                        transform.position.x,
-                        transform.position.y,
-                        transform.position.z,
+                        transform.translation.x,
+                        transform.translation.y,
+                        transform.translation.z,
                     ),
                     &PxQuat::new(
                         transform.rotation.x,
@@ -386,9 +387,9 @@ impl<Allocator: AllocatorCallback> physics::World for World<Allocator> {
             .create_static(
                 PxTransform::from_translation_rotation(
                     &PxVec3::new(
-                        transform.position.x,
-                        transform.position.y,
-                        transform.position.z,
+                        transform.translation.x,
+                        transform.translation.y,
+                        transform.translation.z,
                     ),
                     &PxQuat::new(
                         transform.rotation.x,
@@ -412,6 +413,7 @@ impl<Allocator: AllocatorCallback> physics::World for World<Allocator> {
 }
 
 #[derive(Component, Replicated)]
+#[component_type(STATIC_ACTOR_COMPONENT_TYPE)]
 pub struct StaticActorComponent {
     #[replication_id]
     pub id: Id,
@@ -419,13 +421,16 @@ pub struct StaticActorComponent {
     pub transform: Transform,
 }
 
-impl physics::StaticActorComponent for StaticActorComponent {
+impl physics::TransformComponent for StaticActorComponent {
     fn transform(&self) -> &Transform {
         &self.transform
     }
 }
 
+impl physics::StaticActorComponent for StaticActorComponent {}
+
 #[derive(Component, Replicated)]
+#[component_type(DYNAMIC_ACTOR_COMPONENT_TYPE)]
 pub struct DynamicActorComponent {
     #[replication_id]
     pub id: Id,
@@ -433,11 +438,13 @@ pub struct DynamicActorComponent {
     pub transform: Transform,
 }
 
-impl physics::DynamicActorComponent for DynamicActorComponent {
+impl physics::TransformComponent for DynamicActorComponent {
     fn transform(&self) -> &Transform {
         &self.transform
     }
+}
 
+impl physics::DynamicActorComponent for DynamicActorComponent {
     fn transform_mut(&mut self) -> &mut Transform {
         &mut self.transform
     }

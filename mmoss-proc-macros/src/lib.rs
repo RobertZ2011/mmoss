@@ -1,11 +1,37 @@
 use quote::quote;
 use syn::{Data, DeriveInput, Expr, Meta, parse_macro_input};
 
-#[proc_macro_derive(Replicated, attributes(replicated, replication_id))]
+#[proc_macro_derive(Replicated, attributes(replicated, replication_id, component_type))]
 pub fn derive_replicated(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     let name = input.ident;
+    let mut component_type = None;
+
+    for attr in &input.attrs {
+        if attr.path().is_ident("component_type") {
+            let expr = attr.parse_args::<Expr>();
+            if let Err(e) = expr {
+                return syn::Error::new_spanned(
+                    attr,
+                    format!("component_type must be a valid expression: {}", e),
+                )
+                .to_compile_error()
+                .into();
+            }
+
+            component_type = Some(expr.unwrap());
+        }
+    }
+
+    if component_type.is_none() {
+        return syn::Error::new_spanned(
+            name,
+            "No component_type attribute found. Please add #[component_type(<expr>)]",
+        )
+        .to_compile_error()
+        .into();
+    }
 
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -114,8 +140,12 @@ pub fn derive_replicated(input: proc_macro::TokenStream) -> proc_macro::TokenStr
                 self.#replication_id_field
             }
 
-            fn component_id(&self, world: &bevy::ecs::world::World) -> bevy::ecs::component::ComponentId {
-                world.component_id::<Self>().unwrap()
+            fn replicated_component_type(&self) -> replication::ComponentType {
+                #component_type
+            }
+
+            fn component_type(&self) -> replication::ComponentType {
+                #component_type
             }
 
             fn serialize(&self, data: &mut [u8]) -> ::anyhow::Result<usize> {

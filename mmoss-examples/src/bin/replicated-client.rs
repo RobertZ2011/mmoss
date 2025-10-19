@@ -1,12 +1,14 @@
 use bevy::ecs::world::World;
-use bevy_trait_query::RegisterExt;
+use bevy_trait_query::{One, RegisterExt};
 use mmoss::net::transport::tcp;
+use mmoss::physics::TransformComponent;
+use mmoss::physics::proxy::DynamicActorComponentProxy;
 use mmoss::replication::client::{Factory, Manager};
 use mmoss::replication::{MessageFactoryNew, Replicated};
 
 use env_logger;
+use mmoss_examples_lib::RenderComponent;
 use mmoss_examples_lib::mob::SQUARE_TYPE;
-use mmoss_examples_lib::{RenderComponent, TransformComponent};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -42,7 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let mut world = World::new();
-    world.register_component_as::<dyn Replicated, TransformComponent>();
+    world.register_component_as::<dyn TransformComponent, DynamicActorComponentProxy>();
+    world.register_component_as::<dyn Replicated, DynamicActorComponentProxy>();
     world.register_component_as::<dyn Replicated, RenderComponent>();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -64,10 +67,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         canvas.clear();
 
         for (render, transform) in world
-            .query::<(&RenderComponent, &TransformComponent)>()
+            .query::<(&RenderComponent, One<&dyn TransformComponent>)>()
             .iter(&world)
         {
-            render.render(&mut canvas, transform.position)?;
+            render.render(&mut canvas, transform.into_inner())?;
         }
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));

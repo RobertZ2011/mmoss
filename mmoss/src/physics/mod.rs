@@ -6,11 +6,13 @@ use bevy::{
 use bevy_trait_query::queryable;
 use bincode::{Decode, Encode};
 
+pub mod proxy;
+
 use crate::replication::{Id, convert};
 
 #[derive(Debug, Clone)]
 pub struct Transform {
-    pub position: Vec3,
+    pub translation: Vec3,
     pub rotation: Quat,
 }
 
@@ -19,7 +21,7 @@ impl Encode for Transform {
         &self,
         encoder: &mut E,
     ) -> core::result::Result<(), bincode::error::EncodeError> {
-        convert::Vec3::from(self.position).encode(encoder)?;
+        convert::Vec3::from(self.translation).encode(encoder)?;
         convert::Quat::from(self.rotation).encode(encoder)?;
         Ok(())
     }
@@ -31,14 +33,17 @@ impl<Context> Decode<Context> for Transform {
     ) -> core::result::Result<Self, bincode::error::DecodeError> {
         let position = convert::Vec3::decode(decoder)?.into();
         let rotation = convert::Quat::decode(decoder)?.into();
-        Ok(Transform { position, rotation })
+        Ok(Transform {
+            translation: position,
+            rotation,
+        })
     }
 }
 
 impl Default for Transform {
     fn default() -> Self {
         Self {
-            position: Vec3::ZERO,
+            translation: Vec3::ZERO,
             rotation: Quat::IDENTITY,
         }
     }
@@ -74,15 +79,17 @@ pub enum Shape {
     Capsule(CapsuleShape),
 }
 
-/// Core actor trait for components
 #[queryable]
-pub trait StaticActorComponent {
+pub trait TransformComponent {
     fn transform(&self) -> &Transform;
 }
 
+/// Core actor trait for components
 #[queryable]
-pub trait DynamicActorComponent {
-    fn transform(&self) -> &Transform;
+pub trait StaticActorComponent: TransformComponent {}
+
+#[queryable]
+pub trait DynamicActorComponent: TransformComponent {
     fn transform_mut(&mut self) -> &mut Transform;
 }
 

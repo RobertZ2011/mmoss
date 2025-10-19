@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             sphere_entity.id(),
             Id(2),
             &Transform {
-                position: Vec3::new(0.0, 10.0, 0.0),
+                translation: Vec3::new(0.0, 10.0, 0.0),
                 ..Default::default()
             },
             10.0,
@@ -102,8 +102,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             canvas
                 .draw_rect(Rect::from_center(
                     (
-                        (transform.position.x * 10.0 + 100.0) as i32,
-                        100 - (transform.position.y * 10.0) as i32,
+                        (transform.translation.x * 10.0 + 100.0) as i32,
+                        100 - (transform.translation.y * 10.0) as i32,
                     ),
                     10,
                     10,

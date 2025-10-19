@@ -1,12 +1,13 @@
 use bevy::ecs::world::World;
-use bevy_trait_query::RegisterExt;
+use bevy_trait_query::{One, RegisterExt};
 use log::info;
 use mmoss::{
     net::transport::tcp,
+    physics::{Transform, TransformComponent, proxy::DynamicActorComponentProxy},
     replication::{Id, MessageFactoryNew, Replicated, server::Manager},
 };
 use mmoss_examples_lib::{
-    RenderComponent, TransformComponent,
+    RenderComponent,
     mob::{SQUARE_TYPE, square_server},
 };
 
@@ -36,7 +37,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Client connected from {}", addr);
 
     let mut world = World::new();
-    world.register_component_as::<dyn Replicated, TransformComponent>();
+    world.register_component_as::<dyn TransformComponent, DynamicActorComponentProxy>();
+    world.register_component_as::<dyn Replicated, DynamicActorComponentProxy>();
     world.register_component_as::<dyn Replicated, RenderComponent>();
 
     let mut manager = Manager::new();
@@ -49,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mouse_entity = world
         .spawn((
             SQUARE_TYPE,
-            TransformComponent::new(Id(1)),
+            DynamicActorComponentProxy::new(Id(1)),
             render_component,
         ))
         .id();
@@ -74,7 +76,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let entity = square_server(
                         &mut world,
-                        (id0, (x, y)),
+                        (
+                            id0,
+                            Transform {
+                                translation: bevy::math::Vec3::new(x as f32, y as f32, 0.0),
+                                ..Default::default()
+                            },
+                        ),
                         (
                             id1,
                             (rng.random::<u8>(), rng.random::<u8>(), rng.random::<u8>()),
@@ -86,10 +94,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Event::MouseMotion { x, y, .. } => {
                     if let Ok(mut transform) = world
-                        .query::<&mut TransformComponent>()
+                        .query::<&mut DynamicActorComponentProxy>()
                         .get_mut(&mut world, mouse_entity)
                     {
-                        transform.position = (x, y);
+                        transform.transform.translation =
+                            bevy::math::Vec3::new(x as f32, y as f32, 0.0);
                     }
                     manager.mark_dirty(mouse_entity);
                 }
@@ -103,10 +112,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         canvas.clear();
 
         for (render, transform) in world
-            .query::<(&RenderComponent, &TransformComponent)>()
+            .query::<(&RenderComponent, One<&dyn TransformComponent>)>()
             .iter(&world)
         {
-            render.render(&mut canvas, transform.position)?;
+            render.render(&mut canvas, transform.into_inner())?;
         }
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));

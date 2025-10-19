@@ -1,8 +1,5 @@
 use anyhow::Result;
-use bevy::ecs::{
-    component::{Component, ComponentId},
-    world::World,
-};
+use bevy::ecs::component::Component;
 use bevy_trait_query::queryable;
 use bincode::{Decode, Encode};
 use mmoss_proc_macros::Replicated;
@@ -21,10 +18,15 @@ pub struct Id(pub u32);
 #[repr(transparent)]
 pub struct MobType(pub u32);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode, Component)]
+#[repr(transparent)]
+pub struct ComponentType(pub u32);
+
 #[queryable]
 pub trait Replicated {
     fn id(&self) -> Id;
-    fn component_id(&self, world: &World) -> ComponentId;
+    fn replicated_component_type(&self) -> ComponentType;
+    fn component_type(&self) -> ComponentType;
 
     fn serialize(&self, data: &mut [u8]) -> Result<usize>;
     fn replicate(&mut self, data: &[u8]) -> Result<usize>;
@@ -39,7 +41,7 @@ pub struct UpdateData {
 #[derive(Debug, Clone, Decode, Encode)]
 pub struct SpawnData {
     pub mob_type: MobType,
-    pub replicated: Vec<(usize, Id, Vec<u8>)>,
+    pub replicated: Vec<(ComponentType, Id, Vec<u8>)>,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]

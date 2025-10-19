@@ -46,7 +46,6 @@ impl Manager {
     }
 
     async fn serialize_spawned<'a>(
-        world: &World,
         clients: &mut [Box<dyn Reliable<Message>>],
         iter: impl Iterator<Item = (&'a MobType, ReadTraits<'a, dyn Replicated>)>,
     ) {
@@ -67,7 +66,7 @@ impl Manager {
                 let len = result.unwrap();
                 data.truncate(len);
                 trace!("Serialized component {:?}: {} bytes", comp.id(), data.len());
-                replicated.push((comp.component_id(world).index(), comp.id(), data));
+                replicated.push((comp.replicated_component_type(), comp.id(), data));
             }
 
             let message = Message::Spawn(SpawnData {
@@ -129,8 +128,7 @@ impl Manager {
             trace!("Newly spawned entities: {:?}", self.newly_spawned.len());
             let mut query = world.query::<(&MobType, All<&dyn Replicated>)>();
             let entities = mem::replace(&mut self.newly_spawned, EntityHashSet::new());
-            Self::serialize_spawned(world, &mut self.clients, query.iter_many(world, entities))
-                .await;
+            Self::serialize_spawned(&mut self.clients, query.iter_many(world, entities)).await;
             self.newly_spawned.clear();
         }
 
@@ -141,7 +139,7 @@ impl Manager {
                 self.pending_full_sync.len()
             );
             let mut query = world.query::<(&MobType, All<&dyn Replicated>)>();
-            Self::serialize_spawned(world, &mut self.pending_full_sync, query.iter(world)).await;
+            Self::serialize_spawned(&mut self.pending_full_sync, query.iter(world)).await;
 
             let mut drained = self.pending_full_sync.drain(..).collect::<Vec<_>>();
             self.clients.append(&mut drained);

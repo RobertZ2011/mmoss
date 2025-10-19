@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     net::transport::Unreliable,
-    replication::{Id, Message, MobType, Replicated, SpawnData, UpdateData},
+    replication::{ComponentType, Id, Message, MobType, Replicated, SpawnData, UpdateData},
 };
 
 struct Pending {
@@ -119,8 +119,10 @@ impl<'f> Manager<'f> {
 }
 
 pub struct Factory {
-    prototypes:
-        HashMap<MobType, Box<dyn Fn(&mut World, &[(usize, Id, Vec<u8>)]) -> Result<Entity> + Sync>>,
+    prototypes: HashMap<
+        MobType,
+        Box<dyn Fn(&mut World, &[(ComponentType, Id, Vec<u8>)]) -> Result<Entity> + Sync>,
+    >,
 }
 
 impl Factory {
@@ -132,7 +134,7 @@ impl Factory {
 
     pub fn register_mob<F>(&mut self, mob_type: MobType, constructor: F)
     where
-        F: 'static + Fn(&mut World, &[(usize, Id, Vec<u8>)]) -> Result<Entity> + Sync,
+        F: 'static + Fn(&mut World, &[(ComponentType, Id, Vec<u8>)]) -> Result<Entity> + Sync,
     {
         self.prototypes.insert(mob_type, Box::new(constructor));
     }
@@ -141,7 +143,7 @@ impl Factory {
         &self,
         world: &mut World,
         mob_type: MobType,
-        replicated: &Vec<(usize, Id, Vec<u8>)>,
+        replicated: &Vec<(ComponentType, Id, Vec<u8>)>,
     ) -> Result<Entity> {
         let constructor = self.prototypes.get(&mob_type).ok_or_else(|| {
             anyhow::anyhow!("No prototype registered for mob type {:?}", mob_type)
