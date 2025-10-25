@@ -10,16 +10,16 @@ use crate::{
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mmoss_examples_lib_register_square_client(
-    factory: *mut ffi::world::client::FactoryBuilderPtr,
+    factory: *mut ffi::world::client::MobFactoryBuilderPtr,
 ) {
     if factory.is_null() {
         error!("Null factory passed to mmoss_examples_lib_register_square_client");
         return;
     }
 
-    let factory = unsafe { &mut *(factory as *mut ffi::world::client::FactoryBuilderObj) };
+    let factory = unsafe { &mut *(factory as *mut ffi::world::client::MobFactoryBuilderObj) };
 
-    factory.factory.register_mob(SQUARE_TYPE, SquareClient);
+    factory.mob_factory.register_mob(SQUARE_TYPE, SquareClient);
 }
 
 #[unsafe(no_mangle)]

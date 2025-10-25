@@ -3,12 +3,13 @@ use std::{
     sync::Arc,
 };
 
+use bevy::ecs::entity::Entity;
 use bevy_trait_query::RegisterExt as _;
 use log::error;
 use mmoss::{
     core, net,
     physics::{TransformComponent, proxy::DynamicActorComponentProxy},
-    replication::{self, MessageFactoryNew, Replicated},
+    replication::{self, MessageFactoryNew, Replicated, SpawnId, client::UpdateCallbacks},
 };
 
 /// Combined bevy world and replication manager
@@ -30,41 +31,41 @@ impl core::WorldContainer for WorldObj {
     }
 }
 
-pub struct FactoryBuilderObj {
-    pub factory: Box<replication::client::Factory<bevy::ecs::world::World>>,
+pub struct MobFactoryBuilderObj {
+    pub mob_factory: Box<replication::client::factory::mob::Factory<bevy::ecs::world::World>>,
 }
 
 #[repr(C)]
-pub struct FactoryBuilderPtr;
+pub struct MobFactoryBuilderPtr;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mmoss_client_factory_builder_new() -> *mut FactoryBuilderPtr {
-    let factory = FactoryBuilderObj {
-        factory: Box::new(replication::client::Factory::new()),
+pub extern "C" fn mmoss_client_factory_builder_new() -> *mut MobFactoryBuilderPtr {
+    let factory = MobFactoryBuilderObj {
+        mob_factory: Box::new(replication::client::factory::mob::Factory::new()),
     };
 
-    Box::into_raw(Box::new(factory)) as *mut FactoryBuilderPtr
+    Box::into_raw(Box::new(factory)) as *mut MobFactoryBuilderPtr
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mmoss_client_factory_builder_build(
-    builder: *mut FactoryBuilderPtr,
+    builder: *mut MobFactoryBuilderPtr,
 ) -> *mut FactoryPtr {
     if builder.is_null() {
         error!("Null builder passed to client_factory_builder_build");
         return std::ptr::null_mut();
     }
 
-    let builder = unsafe { Box::from_raw(builder as *mut FactoryBuilderObj) };
-    let factory = FactoryObj {
-        factory: Arc::new(*builder.factory),
+    let builder = unsafe { Box::from_raw(builder as *mut MobFactoryBuilderObj) };
+    let factory = MobFactoryObj {
+        factory: Arc::new(*builder.mob_factory),
     };
 
     Box::into_raw(Box::new(factory)) as *mut FactoryPtr
 }
 
-pub struct FactoryObj {
-    pub factory: Arc<replication::client::Factory<bevy::ecs::world::World>>,
+pub struct MobFactoryObj {
+    pub factory: Arc<replication::client::factory::mob::Factory<bevy::ecs::world::World>>,
 }
 
 #[repr(C)]
@@ -110,9 +111,17 @@ pub extern "C" fn client_world_new(
     bevy_world.register_component_as::<dyn TransformComponent, DynamicActorComponentProxy>();
     bevy_world.register_component_as::<dyn Replicated, DynamicActorComponentProxy>();
 
-    let factory = unsafe { &*(factory as *const FactoryObj) };
-    let (replication_manager, incoming) =
-        replication::client::Manager::new(Box::new(transport.unwrap()), factory.factory.clone());
+    let mob_factory = unsafe { &*(factory as *const MobFactoryObj) };
+    let component_factory = {
+        let mut factory = replication::client::factory::component::Factory::new();
+        replication::client::factory::component::register_default_factory_components(&mut factory);
+        Arc::new(factory)
+    };
+    let (replication_manager, incoming) = replication::client::Manager::new(
+        Box::new(transport.unwrap()),
+        mob_factory.factory.clone(),
+        component_factory,
+    );
 
     // Start processing incoming messages
     rtt.spawn(async move {
@@ -144,18 +153,75 @@ pub extern "C" fn client_world_destroy(world: *mut WorldPtr) {
     }
 }
 
+pub struct ClientWorldUpdateCallbacks {
+    pub on_spawn: Option<unsafe extern "C" fn(entity: u32, mob_type: u32)>,
+    pub on_component_updated: Option<unsafe extern "C" fn(entity: u32, id: u32)>,
+    pub on_component_added:
+        Option<unsafe extern "C" fn(entity: u32, spawn_id: u32, component_type: u32, id: u32)>,
+}
+
+impl UpdateCallbacks for ClientWorldUpdateCallbacks {
+    fn on_component_updated(&mut self, entity: Entity, _spawn_id: SpawnId, id: replication::Id) {
+        if let Some(callback) = self.on_component_updated {
+            unsafe {
+                callback(entity.index(), id.0);
+            }
+        }
+    }
+
+    fn on_spawn(&mut self, entity: Entity, _spawn_id: SpawnId, mob_type: replication::MobType) {
+        if let Some(callback) = self.on_spawn {
+            unsafe {
+                callback(entity.index(), mob_type.0);
+            }
+        }
+    }
+
+    fn on_component_added(
+        &mut self,
+        entity: Entity,
+        spawn_id: SpawnId,
+        component_type: replication::ComponentType,
+        replicated_id: replication::Id,
+    ) {
+        if let Some(callback) = self.on_component_added {
+            unsafe {
+                callback(
+                    entity.index(),
+                    spawn_id.0,
+                    component_type.0,
+                    replicated_id.0,
+                );
+            }
+        }
+    }
+}
+
 #[unsafe(no_mangle)]
-pub extern "C" fn client_world_update(world: *mut WorldPtr) {
+pub extern "C" fn client_world_update(
+    world: *mut WorldPtr,
+    on_spawn: Option<unsafe extern "C" fn(entity: u32, mob_type: u32)>,
+    on_component_updated: Option<unsafe extern "C" fn(entity: u32, id: u32)>,
+    on_component_added: Option<
+        unsafe extern "C" fn(entity: u32, spawn_id: u32, component_type: u32, id: u32),
+    >,
+) {
     if world.is_null() {
         error!("Null world passed to client_world_update");
         return;
     }
 
+    let mut callbacks = ClientWorldUpdateCallbacks {
+        on_spawn: on_spawn,
+        on_component_updated,
+        on_component_added,
+    };
+
     let world = unsafe { &mut *(world as *mut WorldObj) };
     world.rtt.block_on(async {
         world
             .replication_manager
-            .update_world(&mut world.bevy_world)
+            .update_world(&mut world.bevy_world, &mut callbacks)
             .await
     });
 }

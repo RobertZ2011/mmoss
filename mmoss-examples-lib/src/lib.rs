@@ -1,8 +1,9 @@
+use async_trait::async_trait;
 use bevy::ecs::component::Component;
 use mmoss::{
     self,
     physics::TransformComponent,
-    replication::{ComponentType, Id},
+    replication::{ComponentType, Id, Replicated as _},
 };
 
 use mmoss::replication;
@@ -54,15 +55,42 @@ impl RenderComponent {
     }
 }
 
+pub fn register_factory_components(
+    factory: &mut mmoss::replication::client::factory::component::Factory<
+        impl mmoss::core::WorldContainer,
+    >,
+) {
+    factory.register_component(RENDER_COMPONENT_TYPE, RenderComponentFactory);
+}
+
+pub struct RenderComponentFactory;
+
+#[async_trait(?Send)]
+impl<W: mmoss::core::WorldContainer> mmoss::replication::client::factory::component::Entry<W>
+    for RenderComponentFactory
+{
+    async fn add_component(
+        &self,
+        mut entity: bevy::ecs::world::EntityWorldMut<'_>,
+        replication_id: Id,
+        data: &Vec<u8>,
+    ) -> Result<()> {
+        let mut component = RenderComponent::new(replication_id);
+        component.replicate(data)?;
+        entity.insert(component);
+        Ok(())
+    }
+}
+
 pub mod mob {
     use async_trait::async_trait;
     use bevy::ecs::entity::Entity;
     use mmoss::{
-        core::{self, component_type::physics::DYNAMIC_ACTOR_PROXY_COMPONENT_TYPE},
+        core,
         physics::{
             self, DynamicActorComponent, Transform, World as _, proxy::DynamicActorComponentProxy,
         },
-        replication::{Id, MobType, Replicated, client::FactoryEntry},
+        replication::{Id, MobType, client::factory::mob::Entry as MobFactoryEntry},
     };
 
     use super::*;
@@ -72,38 +100,9 @@ pub mod mob {
     pub struct SquareClient;
 
     #[async_trait(?Send)]
-    impl<W: core::WorldContainer> FactoryEntry<W> for SquareClient {
-        async fn construct(
-            &self,
-            world: &mut W,
-            replicated: &[(ComponentType, Id, Vec<u8>)],
-        ) -> anyhow::Result<Entity> {
-            if replicated.len() != 2 {
-                return Err(anyhow::anyhow!(
-                    "Expected 2 replicated components, got {}",
-                    replicated.len()
-                ));
-            }
-
-            let replicated_index = replicated
-                .iter()
-                .position(|(index, _, _)| *index == DYNAMIC_ACTOR_PROXY_COMPONENT_TYPE)
-                .ok_or_else(|| anyhow::anyhow!("ReplicatedComponent ID not found"))?;
-            let mut dynamic_actor_component =
-                DynamicActorComponentProxy::new(replicated[replicated_index].1);
-            dynamic_actor_component.replicate(&replicated[replicated_index].2)?;
-
-            let render_index = replicated
-                .iter()
-                .position(|(index, _, _)| *index == RENDER_COMPONENT_TYPE)
-                .ok_or_else(|| anyhow::anyhow!("RenderComponent ID not found"))?;
-            let mut render_component = RenderComponent::new(replicated[render_index].1);
-            render_component.replicate(&replicated[render_index].2)?;
-
-            Ok(world
-                .world_mut()
-                .spawn((SQUARE_TYPE, dynamic_actor_component, render_component))
-                .id())
+    impl<W: core::WorldContainer> MobFactoryEntry<W> for SquareClient {
+        async fn construct(&self, world: &mut W) -> anyhow::Result<Entity> {
+            Ok(world.world_mut().spawn(SQUARE_TYPE).id())
         }
     }
 

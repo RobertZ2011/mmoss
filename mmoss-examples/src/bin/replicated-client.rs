@@ -4,12 +4,16 @@ use log::error;
 use mmoss::net::transport::tcp;
 use mmoss::physics::TransformComponent;
 use mmoss::physics::proxy::DynamicActorComponentProxy;
-use mmoss::replication::client::{Factory, Manager};
+use mmoss::replication::client::factory;
+use mmoss::replication::client::{
+    Manager, NoopUpdateCallbacks, factory::component::Factory as ComponentFactory,
+    factory::mob::Factory as MobFactory,
+};
 use mmoss::replication::{MessageFactoryNew, Replicated};
 
 use env_logger;
-use mmoss_examples_lib::RenderComponent;
 use mmoss_examples_lib::mob::SQUARE_TYPE;
+use mmoss_examples_lib::{RenderComponent, register_factory_components};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -33,10 +37,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut canvas = window.into_canvas().build().unwrap();
 
-    let mut mob_factory = Factory::new();
+    let mut mob_factory = MobFactory::new();
     mob_factory.register_mob(SQUARE_TYPE, mmoss_examples_lib::mob::SquareClient);
 
-    let (mut manager, mut incoming) = Manager::new(Box::new(connection), Arc::new(mob_factory));
+    let mut component_factory = ComponentFactory::new();
+    factory::component::register_default_factory_components(&mut component_factory);
+    register_factory_components(&mut component_factory);
+
+    let (mut manager, mut incoming) = Manager::new(
+        Box::new(connection),
+        Arc::new(mob_factory),
+        Arc::new(component_factory),
+    );
 
     tokio::spawn(async move {
         loop {
@@ -64,7 +76,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        manager.update_world(&mut world).await;
+        manager
+            .update_world(&mut world, &mut NoopUpdateCallbacks)
+            .await;
 
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();

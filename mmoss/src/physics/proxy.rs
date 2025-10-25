@@ -5,15 +5,23 @@
 //! proxy types that only replicated a remote component.
 
 use crate::{
-    core::component_type::physics::{
-        DYNAMIC_ACTOR_PROXY_COMPONENT_TYPE, STATIC_ACTOR_PROXY_COMPONENT_TYPE,
+    core::{
+        WorldContainer,
+        component_type::physics::{
+            DYNAMIC_ACTOR_PROXY_COMPONENT_TYPE, STATIC_ACTOR_PROXY_COMPONENT_TYPE,
+        },
     },
     physics::{DynamicActorComponent, StaticActorComponent, TransformComponent},
+    replication::Replicated,
 };
-use bevy::ecs::component::Component;
+use anyhow::Result;
+use async_trait::async_trait;
+use bevy::ecs::{component::Component, world::EntityWorldMut};
 use mmoss_proc_macros::Replicated;
 
 use crate::{physics::Transform, replication, replication::Id};
+
+use replication::client::factory::component::Entry as ComponentFactory;
 
 #[derive(Debug, Clone, Component, Replicated)]
 #[component_type(DYNAMIC_ACTOR_PROXY_COMPONENT_TYPE)]
@@ -42,6 +50,24 @@ impl TransformComponent for DynamicActorComponentProxy {
 impl DynamicActorComponent for DynamicActorComponentProxy {
     fn transform_mut(&mut self) -> &mut Transform {
         &mut self.transform
+    }
+}
+
+pub struct DynamicActorComponentProxyFactory;
+
+#[async_trait(?Send)]
+impl<W: WorldContainer> ComponentFactory<W> for DynamicActorComponentProxyFactory {
+    async fn add_component(
+        &self,
+        mut entity: EntityWorldMut<'_>,
+        replication_id: Id,
+        data: &Vec<u8>,
+    ) -> Result<()> {
+        let mut component = DynamicActorComponentProxy::new(replication_id);
+
+        component.replicate(data)?;
+        entity.insert(component);
+        Ok(())
     }
 }
 

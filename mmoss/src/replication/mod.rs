@@ -32,6 +32,10 @@ pub trait Replicated {
     fn replicate(&mut self, data: &[u8]) -> Result<usize>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode)]
+#[repr(transparent)]
+pub struct SpawnId(pub u32);
+
 #[derive(Debug, Clone, Decode, Encode)]
 pub struct UpdateData {
     pub id: Id,
@@ -41,13 +45,22 @@ pub struct UpdateData {
 #[derive(Debug, Clone, Decode, Encode)]
 pub struct SpawnData {
     pub mob_type: MobType,
-    pub replicated: Vec<(ComponentType, Id, Vec<u8>)>,
+    pub spawn_id: SpawnId,
+}
+
+#[derive(Debug, Clone, Decode, Encode)]
+pub struct AddedComponentData {
+    pub spawn_id: SpawnId,
+    pub component_type: ComponentType,
+    pub replicated_id: Id,
+    pub data: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Decode, Encode)]
 pub enum Message {
     Spawn(SpawnData),
     Update(UpdateData),
+    AddComponent(AddedComponentData),
 }
 
 impl MessageTrait for Message {

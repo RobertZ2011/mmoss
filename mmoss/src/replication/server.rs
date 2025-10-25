@@ -1,15 +1,17 @@
 use std::mem;
 
 use bevy::ecs::{
-    entity::{Entity, EntityHashSet},
-    world::World,
+    entity::{Entity, EntityHashMap, EntityHashSet},
+    world::{EntityRef, World},
 };
 use bevy_trait_query::{All, ReadTraits};
 use log::{debug, error, trace};
 
 use crate::{
     net::transport::Reliable,
-    replication::{Message, MobType, Replicated, SpawnData, UpdateData},
+    replication::{
+        AddedComponentData, Message, MobType, Replicated, SpawnData, SpawnId, UpdateData,
+    },
 };
 
 pub struct Manager {
@@ -21,6 +23,10 @@ pub struct Manager {
     newly_spawned: EntityHashSet,
     /// All objects that have changed since the last update
     dirty: EntityHashSet,
+    /// Map from entity to spawn ID
+    entity_spawn_ids: EntityHashMap<SpawnId>,
+    /// Next spawn ID to use
+    next_spawn_id: u32,
 }
 
 impl Manager {
@@ -30,6 +36,8 @@ impl Manager {
             pending_full_sync: Vec::new(),
             newly_spawned: EntityHashSet::new(),
             dirty: EntityHashSet::new(),
+            entity_spawn_ids: EntityHashMap::new(),
+            next_spawn_id: 0,
         }
     }
 
@@ -42,15 +50,42 @@ impl Manager {
     }
 
     pub fn register_new_entity(&mut self, entity: Entity) {
+        let spawn_id = SpawnId(self.next_spawn_id);
+        self.next_spawn_id += 1;
+        self.entity_spawn_ids.insert(entity, spawn_id);
         self.newly_spawned.insert(entity);
     }
 
     async fn serialize_spawned<'a>(
-        clients: &mut [Box<dyn Reliable<Message>>],
-        iter: impl Iterator<Item = (&'a MobType, ReadTraits<'a, dyn Replicated>)>,
+        &mut self,
+        new_only: bool,
+        iter: impl Iterator<Item = (EntityRef<'a>, &'a MobType, ReadTraits<'a, dyn Replicated>)>,
     ) {
-        for (mob_type, components) in iter {
-            let mut replicated = Vec::new();
+        for (entity, mob_type, components) in iter {
+            let spawn_id = self.entity_spawn_ids.get(&entity.id());
+            if spawn_id.is_none() {
+                error!("No spawn ID found for entity {:?}", entity.id());
+                continue;
+            }
+            let spawn_id = *spawn_id.unwrap();
+
+            let message = Message::Spawn(SpawnData {
+                mob_type: *mob_type,
+                spawn_id,
+            });
+
+            let clients = if new_only {
+                &mut self.pending_full_sync
+            } else {
+                &mut self.clients
+            };
+            for client in clients.iter_mut() {
+                if let Err(e) = client.send(&message).await {
+                    error!("Failed to send spawn message: {}", e);
+                    continue;
+                }
+            }
+
             for comp in components {
                 let mut data = vec![0u8; 512];
 
@@ -65,24 +100,25 @@ impl Manager {
                 }
                 let len = result.unwrap();
                 data.truncate(len);
-                trace!("Serialized component {:?}: {} bytes", comp.id(), data.len());
-                replicated.push((comp.replicated_component_type(), comp.id(), data));
-            }
 
-            let message = Message::Spawn(SpawnData {
-                mob_type: *mob_type,
-                replicated,
-            });
+                trace!(
+                    "Add serialized component {:?}: {} bytes",
+                    comp.id(),
+                    data.len()
+                );
 
-            trace!(
-                "Sending spawn message to {} clients, {:?}",
-                clients.len(),
-                message
-            );
-            for client in &mut *clients {
-                if let Err(e) = client.send(&message).await {
-                    error!("Failed to send spawn message: {}", e);
-                    continue;
+                let message = Message::AddComponent(AddedComponentData {
+                    component_type: comp.replicated_component_type(),
+                    spawn_id,
+                    replicated_id: comp.id(),
+                    data,
+                });
+
+                for client in clients.iter_mut() {
+                    if let Err(e) = client.send(&message).await {
+                        error!("Failed to send add component message: {}", e);
+                        continue;
+                    }
                 }
             }
         }
@@ -129,9 +165,10 @@ impl Manager {
         // Next, handle any newly spawned entities
         if !self.newly_spawned.is_empty() {
             trace!("Newly spawned entities: {:?}", self.newly_spawned.len());
-            let mut query = world.query::<(&MobType, All<&dyn Replicated>)>();
+            let mut query = world.query::<(EntityRef, &MobType, All<&dyn Replicated>)>();
             let entities = mem::replace(&mut self.newly_spawned, EntityHashSet::new());
-            Self::serialize_spawned(&mut self.clients, query.iter_many(world, entities)).await;
+            self.serialize_spawned(false, query.iter_many(world, entities))
+                .await;
             self.newly_spawned.clear();
         }
 
@@ -141,8 +178,8 @@ impl Manager {
                 "Clients pending full sync: {}",
                 self.pending_full_sync.len()
             );
-            let mut query = world.query::<(&MobType, All<&dyn Replicated>)>();
-            Self::serialize_spawned(&mut self.pending_full_sync, query.iter(world)).await;
+            let mut query = world.query::<(EntityRef, &MobType, All<&dyn Replicated>)>();
+            self.serialize_spawned(true, query.iter(world)).await;
 
             let mut drained = self.pending_full_sync.drain(..).collect::<Vec<_>>();
             self.clients.append(&mut drained);
