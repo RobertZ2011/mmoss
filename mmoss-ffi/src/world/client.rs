@@ -75,7 +75,7 @@ pub struct WorldPtr;
 pub struct FactoryPtr;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn client_world_new(
+pub extern "C" fn mmoss_client_world_new(
     factory: *const FactoryPtr,
     addr: *const c_char,
 ) -> *mut WorldPtr {
@@ -143,7 +143,7 @@ pub extern "C" fn client_world_new(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn client_world_destroy(world: *mut WorldPtr) {
+pub extern "C" fn mmoss_client_world_destroy(world: *mut WorldPtr) {
     if world.is_null() {
         return;
     }
@@ -198,7 +198,7 @@ impl UpdateCallbacks for ClientWorldUpdateCallbacks {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn client_world_update(
+pub extern "C" fn mmoss_client_world_update(
     world: *mut WorldPtr,
     on_spawn: Option<unsafe extern "C" fn(entity: u32, mob_type: u32)>,
     on_component_updated: Option<unsafe extern "C" fn(entity: u32, id: u32)>,
