@@ -46,7 +46,7 @@ impl RenderComponent {
         canvas.set_draw_color(Color::RGB(self.color.0, self.color.1, self.color.2));
         canvas
             .draw_rect(Rect::from_center(
-                (translation.x as i32, translation.y as i32),
+                (translation.x as i32 * 10, translation.y as i32 * 10),
                 50,
                 50,
             ))
@@ -125,7 +125,7 @@ pub mod mob {
                     restitution: 0.6,
                 },
                 &[(
-                    physics::Shape::Sphere(physics::SphereShape { radius: 25.0 }),
+                    physics::Shape::Sphere(physics::SphereShape { radius: 2.5 }),
                     Transform::default(),
                 )],
             )

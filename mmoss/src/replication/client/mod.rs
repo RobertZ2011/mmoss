@@ -151,7 +151,10 @@ impl<W: WorldContainer> Manager<W> {
             let entity = self.entity_lookup.get(spawn_id);
             if entity.is_none() {
                 error!("No entity found for spawn ID {:?}", spawn_id);
+                added_components.clear();
+                continue;
             }
+
             let entity = *entity.unwrap();
             for added_component in added_components.drain(..) {
                 if let Err(e) = self
@@ -170,6 +173,13 @@ impl<W: WorldContainer> Manager<W> {
                         added_component.replicated_id,
                         entity.index(),
                         e
+                    );
+                } else {
+                    callbacks.on_component_added(
+                        entity,
+                        *spawn_id,
+                        added_component.component_type,
+                        added_component.replicated_id,
                     );
                 }
             }

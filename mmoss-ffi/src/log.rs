@@ -1,6 +1,6 @@
 use std::ffi::{CString, c_char};
 
-use log::Level;
+use log::{info, Level};
 
 struct Logger {
     callback: Option<unsafe extern "C" fn(level: u8, message: *const c_char)>,
@@ -46,4 +46,6 @@ pub extern "C" fn mmoss_init_log(
     if let Err(e) = log::set_boxed_logger(Box::new(logger)) {
         eprintln!("Failed to set logger: {}", e);
     }
+
+    info!("Mmoss logger init");
 }

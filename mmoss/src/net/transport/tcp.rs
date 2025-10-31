@@ -57,8 +57,9 @@ impl<F: MessageFactory> Connection<F> {
         })
     }
 
-    async fn receive_to_buffer(&mut self, target_len: usize) -> Result<usize> {
-        while self.receive_buffer.len() < target_len {
+    async fn receive_to_buffer(&mut self, needed: usize) -> Result<usize> {
+        let initial = self.receive_buffer.len();
+        while self.receive_buffer.len() < initial + needed {
             let mut buffer = [0u8; BUFFER_SIZE];
             let len = self.stream.read(&mut buffer).await?;
             self.receive_buffer.extend_from_slice(&buffer[..len]);

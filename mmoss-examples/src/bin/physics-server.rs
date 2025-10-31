@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         restitution: 0.6,
     };
 
-    let mut physics_world = engine.create_world(Vec3::new(0.0, -98.1, 0.0)).await?;
+    let mut physics_world = engine.create_world(Vec3::new(0.0, -9.81, 0.0)).await?;
     let mut plane_entity = bevy_world.spawn_empty();
     let plane_component = physics_world
         .create_plane(
@@ -106,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         (
                             id0,
                             Transform {
-                                translation: bevy::math::Vec3::new(x as f32, y as f32, 0.0),
+                                translation: bevy::math::Vec3::new(x as f32 / 10.0 + rng.random::<f32>(), y as f32 / 10.0, rng.random::<f32>()),
                                 ..Default::default()
                             },
                         ),
